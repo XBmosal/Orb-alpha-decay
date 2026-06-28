@@ -8,8 +8,8 @@ A feature is only marked **Complete** when its source exists, is wired into the
 app, the solution compiles, tests exist and pass, and limitations are documented.
 A button/view/interface/mock value alone never counts as complete.
 
-> Current milestone: **Phase 0 + Phase 1 delivered.** The cross-platform core
-> (23 projects) builds on Linux/CI; the WPF shell builds on Windows.
+> Current milestone: **Phase 0 + Phase 1 + Phase 2 delivered.** The cross-platform
+> core (23 projects) builds on Linux/CI; the WPF shell builds on Windows.
 
 ## Phase 0 — Repository foundation
 | Feature | Status | Notes |
@@ -41,10 +41,19 @@ A button/view/interface/mock value alone never counts as complete.
 | Throughput benchmark | Complete · Benchmarked | 500k events processed; **measured ~872k events/sec** (Debug, Linux CI). Goal ≥ 50k. |
 | In-memory replay round-trip | Complete · Tested | Deterministic replay hashes match (full validator = Phase 5). |
 
-## Phases 2–10 — Not started / scaffolded
+## Phase 2 — Order book
+| Feature | Status | Notes |
+|---|---|---|
+| Market-by-price book | Complete · Tested | Aggregated depth, best bid/ask, cumulative depth, crossed/negative detection. |
+| Market-by-order book | Complete · Tested | Order-id FIFO queues; add/modify/cancel/execute/replace; queue analysis. Active only when MBO-entitled. |
+| Snapshot / incremental / book clear | Complete · Tested | Invalid until snapshot completes; visible `InvalidReason`. |
+| Sequence-gap invalidation + resync | Complete · Tested | Gap → invalid until fresh snapshot rebuilds. |
+| Book checkpoints (replay seeking) | Complete · Tested | Restore + apply-rest == full replay (`CheckpointSeekTests`). |
+| Order-book benchmark | Complete | `OrderBookBenchmark` (apply throughput + allocations). |
+
+## Phases 3–10 — Not started / scaffolded
 | Phase | Status |
 |---|---|
-| 2 Order book (MBP/MBO) | Interface only (`IOrderBook`) |
 | 3 Bars & analytics (footprints, delta, CVD, profile, VWAP) | Not started |
 | 4 Core UI (Skia charts, DOM, T&S) | Not started (shell + palette done) |
 | 5 Recording & replay (Parquet/SQLite/DuckDB, ReplayValidator) | Interface only |

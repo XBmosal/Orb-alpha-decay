@@ -15,6 +15,13 @@ public interface IOrderBook
     /// <summary>True once a valid snapshot has been applied and no unresolved gap exists.</summary>
     bool IsValid { get; }
 
+    /// <summary>
+    /// Human-readable reason the book is currently invalid (e.g. "sequence gap",
+    /// "crossed book", "awaiting snapshot"), or null when valid. Surfaced to the UI
+    /// so an invalid book is always visible.
+    /// </summary>
+    string? InvalidReason { get; }
+
     long BestBidTicks { get; }
 
     long BestAskTicks { get; }
@@ -22,7 +29,10 @@ public interface IOrderBook
     /// <summary>Aggregated resting size at a price level for the given side (0 if none).</summary>
     long SizeAt(Side side, long priceTicks);
 
-    /// <summary>Applies one canonical event, mutating book state. Returns false if it invalidated the book.</summary>
+    /// <summary>Cumulative resting size across the best <paramref name="levels"/> on a side.</summary>
+    long CumulativeDepth(Side side, int levels);
+
+    /// <summary>Applies one canonical event, mutating book state. Returns false if the book is invalid afterward.</summary>
     bool Apply(in MarketEvent marketEvent);
 
     /// <summary>Clears all state (book clear, reconnect, contract change).</summary>
