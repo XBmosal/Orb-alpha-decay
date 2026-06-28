@@ -63,7 +63,7 @@ public sealed class LiveFeedService : IAsyncDisposable
     private int _barsEvicted;
     private long _lastWarmPriceTicks;
     private const int FootprintBars = 20;
-    private const int WarmUpMinutes = 50; // recent synthetic history so the chart is populated on open
+    private const int WarmUpMinutes = 20; // recent synthetic history so the chart is populated on open
     private readonly LiquidityHeatmap _heatmap = new(TimeSpan.FromMilliseconds(250));
     private readonly HeatmapRenderer _heatmapRenderer = new();
     private readonly DetectorEngine _detectors = new(RootSymbol.NQ);
@@ -117,8 +117,13 @@ public sealed class LiveFeedService : IAsyncDisposable
                 break;
             }
 
-            // ProcessAsync completes synchronously; call it inline under its own lock.
-            ProcessAsync(e, CancellationToken.None).GetAwaiter().GetResult();
+            // Warm-up only builds what the historical chart needs (bars, profile,
+            // VWAP, footprint, TPO). The liquidity heatmap and the detector engine are
+            // intentionally skipped here: the heatmap's per-event forward-fill and the
+            // detectors processing every print are the slow path, and neither produces
+            // anything visible on the *historical* candle view. They start live with
+            // the real stream. This keeps warm-up well under a second instead of ~40s.
+            Ingest(e, warmUp: true);
             if (e.Type == MarketEventType.Trade)
             {
                 _lastWarmPriceTicks = e.PriceTicks;
@@ -143,14 +148,30 @@ public sealed class LiveFeedService : IAsyncDisposable
 
     private ValueTask ProcessAsync(MarketEvent e, CancellationToken ct)
     {
+        Ingest(e, warmUp: false);
+        return ValueTask.CompletedTask;
+    }
+
+    /// <summary>
+    /// Processes one canonical event into the analytics. When <paramref name="warmUp"/>
+    /// is true the heavy, history-replay-only-irrelevant work (the liquidity heatmap's
+    /// per-event forward-fill and the detector engine) is skipped so the historical
+    /// chart can be built in a fraction of a second; the live stream passes false so
+    /// every engine runs in real time.
+    /// </summary>
+    private void Ingest(MarketEvent e, bool warmUp)
+    {
         lock (_lock)
         {
             _book.Apply(e);
-            _heatmap.OnClock(e.ExchangeTimestampUtc);
-            _detectors.OnEvent(e);
-            if (e.Type is MarketEventType.BidUpdate or MarketEventType.AskUpdate)
+            if (!warmUp)
             {
-                _heatmap.OnDepth(e);
+                _heatmap.OnClock(e.ExchangeTimestampUtc);
+                _detectors.OnEvent(e);
+                if (e.Type is MarketEventType.BidUpdate or MarketEventType.AskUpdate)
+                {
+                    _heatmap.OnDepth(e);
+                }
             }
 
             if (e.Type == MarketEventType.Trade)
@@ -169,7 +190,7 @@ public sealed class LiveFeedService : IAsyncDisposable
 
                 if (_bars.AddTrade(e) is { } completed)
                 {
-                    _detectors.OnBar(completed);
+                    if (!warmUp) _detectors.OnBar(completed);
                     _completed.Add(completed);
                     _vwapByBar.Add(_multiVwap.Daily.VwapTicks);
                     _barFootprints.Add(_currentFootprint);
@@ -193,8 +214,6 @@ public sealed class LiveFeedService : IAsyncDisposable
                 }
             }
         }
-
-        return ValueTask.CompletedTask;
     }
 
     /// <summary>Latest coalesced snapshot for rendering. Cheap; safe to call at frame rate.</summary>
