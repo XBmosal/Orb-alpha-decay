@@ -1,0 +1,15 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\FlowTerminal.Domain\FlowTerminal.Domain.csproj" />
+    <ProjectReference Include="..\FlowTerminal.MarketData\FlowTerminal.MarketData.csproj" />
+    <ProjectReference Include="..\FlowTerminal.Storage\FlowTerminal.Storage.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

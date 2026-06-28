@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The WPF desktop shell. This is the ONLY Windows-specific project.
+    It targets net8.0-windows and uses WPF + SkiaSharp for rendering.
+    It compiles only on Windows. CI builds it on windows-latest; the
+    cross-platform core libraries and tests build everywhere.
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>FlowTerminal.App</RootNamespace>
+    <AssemblyName>FlowTerminal</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Configuration" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="8.0.1" />
+    <PackageReference Include="Serilog" Version="4.0.2" />
+    <PackageReference Include="Serilog.Extensions.Hosting" Version="8.0.0" />
+    <PackageReference Include="Serilog.Sinks.Console" Version="6.0.0" />
+    <PackageReference Include="Serilog.Sinks.File" Version="6.0.0" />
+    <PackageReference Include="SkiaSharp" Version="2.88.8" />
+    <PackageReference Include="SkiaSharp.Views.WPF" Version="2.88.8" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\FlowTerminal.Domain\FlowTerminal.Domain.csproj" />
+    <ProjectReference Include="..\FlowTerminal.Infrastructure\FlowTerminal.Infrastructure.csproj" />
+    <ProjectReference Include="..\FlowTerminal.MarketData\FlowTerminal.MarketData.csproj" />
+    <ProjectReference Include="..\FlowTerminal.OrderBook\FlowTerminal.OrderBook.csproj" />
+    <ProjectReference Include="..\FlowTerminal.Analytics\FlowTerminal.Analytics.csproj" />
+    <ProjectReference Include="..\FlowTerminal.Charting\FlowTerminal.Charting.csproj" />
+    <ProjectReference Include="..\FlowTerminal.Replay\FlowTerminal.Replay.csproj" />
+    <ProjectReference Include="..\FlowTerminal.Storage\FlowTerminal.Storage.csproj" />
+    <ProjectReference Include="..\FlowTerminal.Notes\FlowTerminal.Notes.csproj" />
+    <ProjectReference Include="..\FlowTerminal.Rithmic\FlowTerminal.Rithmic.csproj" />
+  </ItemGroup>
+
+</Project>

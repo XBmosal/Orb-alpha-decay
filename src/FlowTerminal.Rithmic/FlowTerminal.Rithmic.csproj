@@ -1,0 +1,25 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\FlowTerminal.Domain\FlowTerminal.Domain.csproj" />
+    <ProjectReference Include="..\FlowTerminal.MarketData\FlowTerminal.MarketData.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <!--
+    Rithmic build profile. The default (mock) build leaves EnableRithmic unset, so
+    the proprietary SDK is never required to build. To enable the authorized
+    integration after installing the SDK (see lib/rithmic/README.md), build with:
+        dotnet build -p:EnableRithmic=true
+    which defines the RITHMIC_SDK symbol used to compile the adapter region.
+  -->
+  <PropertyGroup Condition="'$(EnableRithmic)' == 'true'">
+    <DefineConstants>$(DefineConstants);RITHMIC_SDK</DefineConstants>
+  </PropertyGroup>
+
+</Project>

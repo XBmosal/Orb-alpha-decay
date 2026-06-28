@@ -1,0 +1,85 @@
+<Window x:Class="FlowTerminal.App.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Flow Terminal — Read-Only Order Flow (NQ / ES)"
+        Height="900" Width="1500"
+        Background="{StaticResource BackgroundBrush}"
+        WindowStartupLocation="CenterScreen">
+
+    <Grid Margin="8">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />  <!-- Top status bar -->
+            <RowDefinition Height="*" />     <!-- Main chart + DOM -->
+            <RowDefinition Height="220" />   <!-- CVD/Profile + Time and Sales -->
+            <RowDefinition Height="Auto" />  <!-- Bottom tabs -->
+        </Grid.RowDefinitions>
+
+        <!-- Top status bar: Instrument | Contract | Connection | Session | Status -->
+        <Border Grid.Row="0" Background="{StaticResource PanelBrush}" CornerRadius="6" Padding="10,6">
+            <DockPanel LastChildFill="False">
+                <TextBlock Text="Flow Terminal" FontSize="15" FontWeight="SemiBold" Margin="0,0,16,0" />
+                <TextBlock Text="Instrument:" Foreground="{StaticResource MutedTextBrush}" Margin="0,0,4,0" />
+                <TextBlock x:Name="InstrumentText" Margin="0,0,16,0" />
+                <TextBlock Text="Contract:" Foreground="{StaticResource MutedTextBrush}" Margin="0,0,4,0" />
+                <TextBlock x:Name="ContractText" Margin="0,0,16,0" />
+                <TextBlock Text="Session:" Foreground="{StaticResource MutedTextBrush}" Margin="0,0,4,0" />
+                <TextBlock x:Name="SessionText" Margin="0,0,16,0" />
+
+                <!-- Honest read-only and simulated-data banners -->
+                <Border DockPanel.Dock="Right" Background="{StaticResource WarningBrush}"
+                        CornerRadius="4" Padding="8,2" Margin="8,0,0,0">
+                    <TextBlock x:Name="SimulatedBanner" Foreground="#FF15171C" FontWeight="Bold" />
+                </Border>
+                <Border DockPanel.Dock="Right" BorderBrush="{StaticResource MutedTextBrush}"
+                        BorderThickness="1" CornerRadius="4" Padding="8,2">
+                    <TextBlock x:Name="ReadOnlyBanner" Foreground="{StaticResource MutedTextBrush}" FontWeight="SemiBold" />
+                </Border>
+            </DockPanel>
+        </Border>
+
+        <!-- Main area: footprint/heatmap chart (left) + read-only DOM (right) -->
+        <Grid Grid.Row="1" Margin="0,8,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="260" />
+            </Grid.ColumnDefinitions>
+            <Border Grid.Column="0" Background="{StaticResource PanelBrush}" CornerRadius="6">
+                <TextBlock Text="Footprint / Heatmap chart (SkiaSharp) — Phase 4"
+                           Foreground="{StaticResource MutedTextBrush}"
+                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+            </Border>
+            <Border Grid.Column="1" Background="{StaticResource PanelBrush}" CornerRadius="6" Margin="8,0,0,0">
+                <TextBlock Text="Read-Only DOM — Phase 6&#x0a;(observational; no order entry)"
+                           Foreground="{StaticResource MutedTextBrush}" TextAlignment="Center"
+                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+            </Border>
+        </Grid>
+
+        <!-- CVD / Delta / Profile (left) + Time and Sales (right) -->
+        <Grid Grid.Row="2" Margin="0,8,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="320" />
+            </Grid.ColumnDefinitions>
+            <Border Grid.Column="0" Background="{StaticResource PanelBrush}" CornerRadius="6">
+                <TextBlock Text="CVD / Delta / Volume Profile — Phase 3/4"
+                           Foreground="{StaticResource MutedTextBrush}"
+                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+            </Border>
+            <Border Grid.Column="1" Background="{StaticResource PanelBrush}" CornerRadius="6" Margin="8,0,0,0">
+                <TextBlock Text="Time and Sales — Phase 4"
+                           Foreground="{StaticResource MutedTextBrush}"
+                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+            </Border>
+        </Grid>
+
+        <!-- Bottom tabs: Replay | Notes | Data | Diagnostics | Performance -->
+        <Border Grid.Row="3" Background="{StaticResource PanelBrush}" CornerRadius="6" Margin="0,8,0,0" Padding="8">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="Replay · Notes · Data · Diagnostics · Performance"
+                           Foreground="{StaticResource MutedTextBrush}" Margin="0,0,16,0" />
+                <TextBlock x:Name="RithmicStatusText" Foreground="{StaticResource MutedTextBrush}" />
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>
