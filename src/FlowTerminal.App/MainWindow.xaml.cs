@@ -54,8 +54,9 @@ public partial class MainWindow : Window
         Heatmap.InvalidateVisual(); // repaint the heatmap from the feed's tiled history
 
         var d = snapshot.Diagnostics;
+        string latest = snapshot.Detections.Count > 0 ? $" · last: {snapshot.Detections[0].Label}" : string.Empty;
         DiagnosticsText.Text =
-            $"events {d.EventsProcessed:N0} · queue {d.CurrentQueueDepth} · dropped {d.DroppedCanonicalEvents} · gaps {d.SequenceGaps}";
+            $"events {d.EventsProcessed:N0} · queue {d.CurrentQueueDepth} · dropped {d.DroppedCanonicalEvents} · gaps {d.SequenceGaps} · signals {snapshot.TotalDetections:N0}{latest}";
     }
 
     private static string FormatTape(IReadOnlyList<Charting.Tape.TapeRow> rows)

@@ -8,10 +8,11 @@ A feature is only marked **Complete** when its source exists, is wired into the
 app, the solution compiles, tests exist and pass, and limitations are documented.
 A button/view/interface/mock value alone never counts as complete.
 
-> Current milestone: **Phases 0–6 delivered.** The cross-platform core (23
-> projects) builds on Linux/CI; the WPF shell builds on Windows. 139 tests pass,
+> Current milestone: **Phases 0–7 delivered.** The cross-platform core (23
+> projects) builds on Linux/CI; the WPF shell builds on Windows. 153 tests pass,
 > including headless SkiaSharp pixel tests of the mandated candle colors, the
-> liquidity heatmap, and end-to-end record → DuckDB inspect → deterministic replay.
+> liquidity heatmap, all eight order-flow detectors, and end-to-end record →
+> DuckDB inspect → deterministic replay.
 
 ## Phase 0 — Repository foundation
 | Feature | Status | Notes |
@@ -94,10 +95,22 @@ A button/view/interface/mock value alone never counts as complete.
 | Advanced DOM pulling/stacking/replenishment | Complete · Tested | `PullStackTracker`; observational only. |
 | Heatmap wired into WPF shell | Mock · Windows-only | Rendered under feed lock; repaint at 30 FPS. |
 
-## Phases 7–10 — Not started / scaffolded
+## Phase 7 — Order-flow detectors
+| Feature | Status | Notes |
+|---|---|---|
+| Large trade | Complete · Tested | Fixed + rolling-percentile; NQ/ES defaults. |
+| Sweep | Complete · Tested | Consecutive levels, max gap, min volume/levels, direction. |
+| Absorption | Complete · Tested | Volume absorbed in a tight band over a window. |
+| Replenishment | Complete · Tested | Repeated deplete/restore per price within window. |
+| Iceberg | Complete · Tested · **Estimated** | Trades+MBP estimate with confidence; never claimed certain. |
+| Stop-run | Complete · Tested | Swing break + volume burst; classification left to user. |
+| Market regime | Complete · Tested | Quiet/Normal/Fast/Extreme from rolling activity. |
+| Delta divergence | Complete · Tested | Higher-high/weaker-delta and inverse, on bars. |
+| Detector engine + determinism | Complete · Tested | Toggles, tooltips, measurements; replay-safe; wired into shell. |
+
+## Phases 8–10 — Not started / scaffolded
 | Phase | Status |
 |---|---|
-| 7 Detectors | Not started |
 | 8 Rithmic live adapter | Blocked (SDK) |
 | 9 Notes & review | Interface only (`INotesRepository`) |
 | 10 Packaging & stabilization | Not started |

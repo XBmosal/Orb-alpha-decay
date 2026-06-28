@@ -1,5 +1,6 @@
 using FlowTerminal.Analytics.Bars;
 using FlowTerminal.Analytics.Delta;
+using FlowTerminal.Analytics.Detectors;
 using FlowTerminal.Analytics.Profiles;
 using FlowTerminal.Charting;
 using FlowTerminal.Charting.Dom;
@@ -22,7 +23,9 @@ public sealed record ChartSnapshot(
     IReadOnlyList<TapeRow> Tape,
     bool BookValid,
     string? BookInvalidReason,
-    DiagnosticsSnapshot Diagnostics);
+    DiagnosticsSnapshot Diagnostics,
+    IReadOnlyList<Detection> Detections,
+    long TotalDetections);
 
 /// <summary>
 /// Drives a mock (or, when wired, live) feed through the canonical pipeline and the
@@ -44,6 +47,7 @@ public sealed class LiveFeedService : IAsyncDisposable
     private readonly List<Bar> _completed = new();
     private readonly LiquidityHeatmap _heatmap = new(TimeSpan.FromMilliseconds(250));
     private readonly HeatmapRenderer _heatmapRenderer = new();
+    private readonly DetectorEngine _detectors = new(RootSymbol.NQ);
     private readonly PipelineDiagnostics _diagnostics = new();
 
     private InstrumentPipeline? _pipeline;
@@ -84,6 +88,7 @@ public sealed class LiveFeedService : IAsyncDisposable
         {
             _book.Apply(e);
             _heatmap.OnClock(e.ExchangeTimestampUtc);
+            _detectors.OnEvent(e);
             if (e.Type is MarketEventType.BidUpdate or MarketEventType.AskUpdate)
             {
                 _heatmap.OnDepth(e);
@@ -96,6 +101,7 @@ public sealed class LiveFeedService : IAsyncDisposable
                 _tape.Add(e);
                 if (_bars.AddTrade(e) is { } completed)
                 {
+                    _detectors.OnBar(completed);
                     _completed.Add(completed);
                     if (_completed.Count > MaxChartBars)
                     {
@@ -123,7 +129,8 @@ public sealed class LiveFeedService : IAsyncDisposable
             var dom = ReadOnlyDom.Build(_book, _profile, 12);
             return new ChartSnapshot(
                 bars, dom, _cvd.CumulativeDelta, _tape.Latest(50),
-                _book.IsValid, _book.InvalidReason, _diagnostics.Snapshot());
+                _book.IsValid, _book.InvalidReason, _diagnostics.Snapshot(),
+                _detectors.Recent(8), _detectors.TotalDetections);
         }
     }
 
