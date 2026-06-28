@@ -8,8 +8,9 @@ A feature is only marked **Complete** when its source exists, is wired into the
 app, the solution compiles, tests exist and pass, and limitations are documented.
 A button/view/interface/mock value alone never counts as complete.
 
-> Current milestone: **Phases 0–3 delivered.** The cross-platform core (23
-> projects) builds on Linux/CI; the WPF shell builds on Windows. 102 tests pass.
+> Current milestone: **Phases 0–4 delivered.** The cross-platform core (23
+> projects) builds on Linux/CI; the WPF shell builds on Windows. 120 tests pass,
+> including headless SkiaSharp pixel tests of the mandated candle colors.
 
 ## Phase 0 — Repository foundation
 | Feature | Status | Notes |
@@ -61,10 +62,20 @@ A button/view/interface/mock value alone never counts as complete.
 | VWAP + std-dev bands | Complete · Tested | Incremental; daily/weekly/anchored via Reset. |
 | Live == replay analytics | Complete · Tested | Same code path; determinism test. |
 
-## Phases 4–10 — Not started / scaffolded
+## Phase 4 — Core UI
+| Feature | Status | Notes |
+|---|---|---|
+| SkiaSharp chart viewport + candlestick renderer | Complete · Tested | Single-canvas; **no per-candle WPF controls**. |
+| Candle colors (green / light-purple) | Complete · Tested | Headless SkiaSharp **pixel** tests assert #22C55E / #C4A7FF and not-red. |
+| Read-only DOM model + Skia ladder | Complete · Tested | Observational; no order-entry fields (asserted by reflection). |
+| Time & Sales (virtualized ring buffer) | Complete · Tested | Bounded memory; filters; large-trade flag; speed-of-tape. |
+| CVD / book-validity readouts | Complete | Live in shell from the feed snapshot. |
+| Workspace state (JSON) | Complete · Tested | Round-trips; SQLite persistence in Phase 5. |
+| WPF shell wired to live mock feed | Mock · Windows-only | Pipeline off-thread; 30 FPS coalesced render. Runtime verified on Windows. |
+
+## Phases 5–10 — Not started / scaffolded
 | Phase | Status |
 |---|---|
-| 4 Core UI (Skia charts, DOM, T&S) | Not started (shell + palette done) |
 | 5 Recording & replay (Parquet/SQLite/DuckDB, ReplayValidator) | Interface only |
 | 6 Heatmap & advanced DOM | Not started |
 | 7 Detectors | Not started |

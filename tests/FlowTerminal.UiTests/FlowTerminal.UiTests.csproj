@@ -12,6 +12,7 @@
   <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="6.0.0" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux" Version="2.88.8" />
     <PackageReference Include="xunit" Version="2.5.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.5.3" />
   </ItemGroup>
@@ -23,6 +24,8 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\FlowTerminal.Charting\FlowTerminal.Charting.csproj" />
     <ProjectReference Include="..\..\src\FlowTerminal.Domain\FlowTerminal.Domain.csproj" />
+    <ProjectReference Include="..\..\src\FlowTerminal.Analytics\FlowTerminal.Analytics.csproj" />
+    <ProjectReference Include="..\..\src\FlowTerminal.OrderBook\FlowTerminal.OrderBook.csproj" />
   </ItemGroup>
 
 </Project>
