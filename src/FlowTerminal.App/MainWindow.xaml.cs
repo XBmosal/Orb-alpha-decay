@@ -39,6 +39,7 @@ public partial class MainWindow : Window
         var contract = new ContractCalendar().SuggestActive(RootSymbol.NQ, DateOnly.FromDateTime(DateTime.UtcNow));
         ContractText.Text = contract.FullSymbol;
         await _feed.StartAsync(contract);
+        Heatmap.Attach(_feed);
         _renderTimer.Start();
     }
 
@@ -50,6 +51,7 @@ public partial class MainWindow : Window
         CvdText.Text = snapshot.Cvd.ToString("N0");
         BookStateText.Text = snapshot.BookValid ? "Book: valid" : $"Book: INVALID ({snapshot.BookInvalidReason})";
         TapeText.Text = FormatTape(snapshot.Tape);
+        Heatmap.InvalidateVisual(); // repaint the heatmap from the feed's tiled history
 
         var d = snapshot.Diagnostics;
         DiagnosticsText.Text =

@@ -52,9 +52,10 @@
             </Border>
         </Grid>
 
-        <!-- CVD / Delta / Profile (left) + Time and Sales (right) -->
+        <!-- CVD (left) + Liquidity Heatmap (center) + Time and Sales (right) -->
         <Grid Grid.Row="2" Margin="0,8,0,0">
             <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="280" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="320" />
             </Grid.ColumnDefinitions>
@@ -65,7 +66,14 @@
                     <TextBlock x:Name="BookStateText" Foreground="{StaticResource MutedTextBrush}" Margin="0,6,0,0" />
                 </StackPanel>
             </Border>
-            <Border Grid.Column="1" Background="{StaticResource PanelBrush}" CornerRadius="6" Margin="8,0,0,0" Padding="8">
+            <Border Grid.Column="1" Background="{StaticResource PanelBrush}" CornerRadius="6" Margin="8,0,0,0" ClipToBounds="True">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top" Text="Liquidity Heatmap (bid green / ask purple)"
+                               Foreground="{StaticResource MutedTextBrush}" Margin="8,6,0,4" />
+                    <controls:HeatmapHost x:Name="Heatmap" />
+                </DockPanel>
+            </Border>
+            <Border Grid.Column="2" Background="{StaticResource PanelBrush}" CornerRadius="6" Margin="8,0,0,0" Padding="8">
                 <DockPanel>
                     <TextBlock DockPanel.Dock="Top" Text="Time and Sales (read-only)"
                                Foreground="{StaticResource MutedTextBrush}" Margin="0,0,0,4" />

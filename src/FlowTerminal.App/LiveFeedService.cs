@@ -1,7 +1,9 @@
 using FlowTerminal.Analytics.Bars;
 using FlowTerminal.Analytics.Delta;
 using FlowTerminal.Analytics.Profiles;
+using FlowTerminal.Charting;
 using FlowTerminal.Charting.Dom;
+using FlowTerminal.Charting.Heatmap;
 using FlowTerminal.Charting.Tape;
 using FlowTerminal.Domain.Events;
 using FlowTerminal.Domain.Instruments;
@@ -9,6 +11,7 @@ using FlowTerminal.MarketData.Abstractions;
 using FlowTerminal.MarketData.Pipeline;
 using FlowTerminal.MarketData.Synthetic;
 using FlowTerminal.OrderBook;
+using SkiaSharp;
 
 namespace FlowTerminal.App;
 
@@ -39,6 +42,8 @@ public sealed class LiveFeedService : IAsyncDisposable
     private readonly TimeAndSalesModel _tape = new();
     private readonly IBarAggregator _bars = BarAggregator.Time(TimeSpan.FromMinutes(1));
     private readonly List<Bar> _completed = new();
+    private readonly LiquidityHeatmap _heatmap = new(TimeSpan.FromMilliseconds(250));
+    private readonly HeatmapRenderer _heatmapRenderer = new();
     private readonly PipelineDiagnostics _diagnostics = new();
 
     private InstrumentPipeline? _pipeline;
@@ -78,6 +83,12 @@ public sealed class LiveFeedService : IAsyncDisposable
         lock (_lock)
         {
             _book.Apply(e);
+            _heatmap.OnClock(e.ExchangeTimestampUtc);
+            if (e.Type is MarketEventType.BidUpdate or MarketEventType.AskUpdate)
+            {
+                _heatmap.OnDepth(e);
+            }
+
             if (e.Type == MarketEventType.Trade)
             {
                 _profile.AddTrade(e);
@@ -113,6 +124,23 @@ public sealed class LiveFeedService : IAsyncDisposable
             return new ChartSnapshot(
                 bars, dom, _cvd.CumulativeDelta, _tape.Latest(50),
                 _book.IsValid, _book.InvalidReason, _diagnostics.Snapshot());
+        }
+    }
+
+    /// <summary>
+    /// Renders the liquidity heatmap under the feed lock (no copy of session history).
+    /// Called from the UI control's paint; the model keeps history tiled so this does
+    /// not rebuild the whole session.
+    /// </summary>
+    public void RenderHeatmap(SKCanvas canvas, SKRect bounds)
+    {
+        lock (_lock)
+        {
+            long bid = _book.BestBidTicks;
+            long ask = _book.BestAskTicks;
+            long mid = bid != BookSide.NoPrice && ask != BookSide.NoPrice ? (bid + ask) / 2 : 80_000;
+            const long window = 60; // ticks above/below mid
+            _heatmapRenderer.Render(canvas, bounds, _heatmap, mid - window, mid + window, HeatmapScale.Percentile);
         }
     }
 

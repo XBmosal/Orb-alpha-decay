@@ -8,10 +8,10 @@ A feature is only marked **Complete** when its source exists, is wired into the
 app, the solution compiles, tests exist and pass, and limitations are documented.
 A button/view/interface/mock value alone never counts as complete.
 
-> Current milestone: **Phases 0–5 delivered.** The cross-platform core (23
-> projects) builds on Linux/CI; the WPF shell builds on Windows. 131 tests pass,
-> including headless SkiaSharp pixel tests of the mandated candle colors and
-> end-to-end record → DuckDB inspect → deterministic replay.
+> Current milestone: **Phases 0–6 delivered.** The cross-platform core (23
+> projects) builds on Linux/CI; the WPF shell builds on Windows. 139 tests pass,
+> including headless SkiaSharp pixel tests of the mandated candle colors, the
+> liquidity heatmap, and end-to-end record → DuckDB inspect → deterministic replay.
 
 ## Phase 0 — Repository foundation
 | Feature | Status | Notes |
@@ -85,10 +85,18 @@ A button/view/interface/mock value alone never counts as complete.
 | DataInspector / ReplayValidator CLIs | Complete | Wired to the real engines. |
 | End-to-end record→inspect→validate | Complete · Tested | Integration test. |
 
-## Phases 6–10 — Not started / scaffolded
+## Phase 6 — Heatmap & advanced DOM
+| Feature | Status | Notes |
+|---|---|---|
+| Liquidity heatmap model | Complete · Tested | Tiled history, dirty-tile tracking, bounded ring, persistence; no per-event rebuild. |
+| Heatmap scale modes | Complete · Tested | Absolute / percentile / logarithmic. |
+| Heatmap renderer | Complete · Tested | Visible-range only; bid-green/ask-purple pixel test. |
+| Advanced DOM pulling/stacking/replenishment | Complete · Tested | `PullStackTracker`; observational only. |
+| Heatmap wired into WPF shell | Mock · Windows-only | Rendered under feed lock; repaint at 30 FPS. |
+
+## Phases 7–10 — Not started / scaffolded
 | Phase | Status |
 |---|---|
-| 6 Heatmap & advanced DOM | Not started |
 | 7 Detectors | Not started |
 | 8 Rithmic live adapter | Blocked (SDK) |
 | 9 Notes & review | Interface only (`INotesRepository`) |
