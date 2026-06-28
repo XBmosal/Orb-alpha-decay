@@ -14,10 +14,15 @@ pwsh build/publish.ps1
 pwsh build/publish.ps1 -SelfContained
 ```
 
-Output lands in `artifacts/publish/`; launch `FlowTerminal.exe`. The CI `windows`
-job builds the full solution; producing a signed MSIX/installer from this publish
-output is the remaining packaging step (sign with your own code-signing cert — none
-is committed).
+Output lands in `artifacts/publish/` as a **multi-file folder** — distribute by
+zipping the whole folder. The CI `windows` job builds the full solution; producing a
+signed MSIX/installer from this publish output is the remaining packaging step (sign
+with your own code-signing cert — none is committed).
+
+> **Do not publish WPF as a single file.** `PublishSingleFile=true` breaks WPF's
+> font cache at startup (`TypeInitializationException` in
+> `MS.Internal.FontCache.MajorLanguages`). The publish script forces multi-file
+> output to avoid this.
 
 ## Application data directories
 All user data lives under `%LOCALAPPDATA%/FlowTerminal/` (never the install dir):
