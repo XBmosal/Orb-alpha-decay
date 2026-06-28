@@ -1,6 +1,9 @@
 using System.IO;
 using System.Windows;
 using FlowTerminal.Infrastructure;
+using FlowTerminal.Notes;
+using FlowTerminal.Storage;
+using FlowTerminal.Storage.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Serilog;
@@ -35,6 +38,18 @@ public partial class App : Application
             .ConfigureServices((_, services) =>
             {
                 services.AddSingleton(paths);
+
+                // Local persistence (SQLite metadata + review system).
+                var db = new SqliteDatabase(paths.Database);
+                db.Migrate();
+                services.AddSingleton(db);
+                services.AddSingleton<ISettingsRepository>(new SqliteSettingsRepository(db));
+                services.AddSingleton<IWorkspaceRepository>(new SqliteWorkspaceRepository(db));
+                services.AddSingleton<INotesRepository>(new SqliteNotesRepository(db));
+                services.AddSingleton<IBookmarkRepository>(new SqliteBookmarkRepository(db));
+                services.AddSingleton<IAnnotationRepository>(new SqliteAnnotationRepository(db));
+                services.AddSingleton(new ScreenshotStore(paths.Screenshots));
+
                 services.AddSingleton<ShellViewModel>();
                 services.AddSingleton<MainWindow>();
             })

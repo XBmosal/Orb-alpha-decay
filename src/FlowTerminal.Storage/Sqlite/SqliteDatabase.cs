@@ -10,7 +10,7 @@ namespace FlowTerminal.Storage.Sqlite;
 /// </summary>
 public sealed class SqliteDatabase
 {
-    public const int CurrentSchemaVersion = 1;
+    public const int CurrentSchemaVersion = 2;
 
     private readonly string _connectionString;
 
@@ -75,6 +75,36 @@ public sealed class SqliteDatabase
                 CREATE INDEX IF NOT EXISTS ix_notes_root ON notes(root);
                 """);
             SetUserVersion(connection, 1);
+        }
+
+        if (version < 2)
+        {
+            ExecuteScript(connection, """
+                CREATE TABLE IF NOT EXISTS bookmarks (
+                    id            TEXT PRIMARY KEY,
+                    created_utc   TEXT NOT NULL,
+                    replay_utc    TEXT NOT NULL,
+                    root          TEXT NOT NULL,
+                    contract      TEXT NOT NULL,
+                    label         TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS annotations (
+                    id            TEXT PRIMARY KEY,
+                    created_utc   TEXT NOT NULL,
+                    root          TEXT NOT NULL,
+                    contract      TEXT NOT NULL,
+                    direction     TEXT NOT NULL,
+                    entry_ticks   INTEGER NOT NULL,
+                    exit_ticks    INTEGER,
+                    stop_ticks    INTEGER,
+                    target_ticks  INTEGER,
+                    outcome       TEXT NOT NULL,
+                    notes         TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS ix_bookmarks_root ON bookmarks(root);
+                CREATE INDEX IF NOT EXISTS ix_annotations_root ON annotations(root);
+                """);
+            SetUserVersion(connection, 2);
         }
     }
 

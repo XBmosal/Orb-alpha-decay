@@ -8,11 +8,12 @@ A feature is only marked **Complete** when its source exists, is wired into the
 app, the solution compiles, tests exist and pass, and limitations are documented.
 A button/view/interface/mock value alone never counts as complete.
 
-> Current milestone: **Phases 0–7 delivered.** The cross-platform core (23
-> projects) builds on Linux/CI; the WPF shell builds on Windows. 153 tests pass,
-> including headless SkiaSharp pixel tests of the mandated candle colors, the
-> liquidity heatmap, all eight order-flow detectors, and end-to-end record →
-> DuckDB inspect → deterministic replay.
+> Current milestone: **Phases 0–7 + 9 delivered; Phase 8 blocked by the Rithmic
+> SDK.** The cross-platform core (23 projects) builds on Linux/CI; the WPF shell
+> builds on Windows. 161 tests pass, including headless SkiaSharp pixel tests of
+> the mandated candle colors, the liquidity heatmap, all eight order-flow
+> detectors, the review system, and end-to-end record → DuckDB inspect →
+> deterministic replay.
 
 ## Phase 0 — Repository foundation
 | Feature | Status | Notes |
@@ -108,11 +109,21 @@ A button/view/interface/mock value alone never counts as complete.
 | Delta divergence | Complete · Tested | Higher-high/weaker-delta and inverse, on bars. |
 | Detector engine + determinism | Complete · Tested | Toggles, tooltips, measurements; replay-safe; wired into shell. |
 
-## Phases 8–10 — Not started / scaffolded
+## Phase 9 — Notes & session review
+| Feature | Status | Notes |
+|---|---|---|
+| Timestamped notes (SQLite) | Complete · Tested | Tags; query by root/contract/tag/date range. |
+| Bookmarks → replay timestamp | Complete · Tested | Jump-to-moment data model + storage. |
+| Manual annotations | Complete · Tested | Entry/exit/stop/target/outcome; always flagged manual-unverified; RR computed. |
+| Screenshot store | Complete · Tested | Saves chart PNGs with sortable names. |
+| Export (CSV / JSON) | Complete · Tested | Notes/bookmarks/annotations; CSV escaping; manual flag. |
+| Persistence wired into shell | Complete | SQLite + repos + screenshot store registered in DI. |
+| Notes/review WPF panel | Not started | Data layer complete; entry/filter/jump UI is remaining UI work. |
+
+## Phases 8 & 10 — Remaining
 | Phase | Status |
 |---|---|
-| 8 Rithmic live adapter | Blocked (SDK) |
-| 9 Notes & review | Interface only (`INotesRepository`) |
+| 8 Rithmic live adapter | **Blocked (SDK)** — boundary in place; needs authorized R\|API+ SDK. |
 | 10 Packaging & stabilization | Not started |
 
 ## Known limitations (current)

@@ -43,6 +43,7 @@ dotnet run -c Release --project src/FlowTerminal.App
 [Order Book](docs/ORDER_BOOK.md) ·
 [Footprints](docs/FOOTPRINTS.md) ·
 [Heatmap](docs/HEATMAP.md) ·
+[Notes & Review](docs/NOTES.md) ·
 [Detectors](docs/DETECTORS.md) ·
 [Replay](docs/REPLAY.md) ·
 [Performance](docs/PERFORMANCE.md) ·

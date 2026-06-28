@@ -85,7 +85,7 @@ public sealed class SqliteWorkspaceRepository : IWorkspaceRepository
 }
 
 /// <summary>SQLite-backed session-review notes (manual annotations; never broker-confirmed trades).</summary>
-public sealed class SqliteNotesRepository : INotesRepository
+public sealed class SqliteNotesRepository : INotesRepository, INotesQueryRepository
 {
     private readonly SqliteDatabase _db;
 
@@ -128,6 +128,37 @@ public sealed class SqliteNotesRepository : INotesRepository
         {
             var tags = JsonSerializer.Deserialize<List<string>>(reader.GetString(5)) ?? new List<string>();
             if (tag is not null && !tags.Contains(tag))
+            {
+                continue;
+            }
+
+            results.Add(new SessionNote(
+                Guid.Parse(reader.GetString(0)),
+                DateTime.Parse(reader.GetString(1), null, System.Globalization.DateTimeStyles.RoundtripKind),
+                Enum.Parse<RootSymbol>(reader.GetString(2)),
+                reader.GetString(3),
+                reader.GetString(4),
+                tags));
+        }
+
+        return Task.FromResult<IReadOnlyList<SessionNote>>(results);
+    }
+
+    /// <summary>Richer query: filter by root, contract, and date range (tag filtered in-memory).</summary>
+    public Task<IReadOnlyList<SessionNote>> QueryAsync(ReviewQuery query, CancellationToken cancellationToken)
+    {
+        using var connection = _db.OpenConnection();
+        using var cmd = connection.CreateCommand();
+        var where = new System.Text.StringBuilder("1=1");
+        ReviewSql.ApplyDateRoot(where, cmd, query, "timestamp_utc");
+        cmd.CommandText = $"SELECT id, timestamp_utc, root, contract, text, tags FROM notes WHERE {where} ORDER BY timestamp_utc;";
+
+        var results = new List<SessionNote>();
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+        {
+            var tags = JsonSerializer.Deserialize<List<string>>(reader.GetString(5)) ?? new List<string>();
+            if (query.Tag is not null && !tags.Contains(query.Tag))
             {
                 continue;
             }
