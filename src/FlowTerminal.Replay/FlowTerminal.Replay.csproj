@@ -4,6 +4,8 @@
     <ProjectReference Include="..\FlowTerminal.Domain\FlowTerminal.Domain.csproj" />
     <ProjectReference Include="..\FlowTerminal.MarketData\FlowTerminal.MarketData.csproj" />
     <ProjectReference Include="..\FlowTerminal.Storage\FlowTerminal.Storage.csproj" />
+    <ProjectReference Include="..\FlowTerminal.Analytics\FlowTerminal.Analytics.csproj" />
+    <ProjectReference Include="..\FlowTerminal.OrderBook\FlowTerminal.OrderBook.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

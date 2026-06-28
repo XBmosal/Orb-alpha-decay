@@ -23,6 +23,8 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\FlowTerminal.Replay\FlowTerminal.Replay.csproj" />
     <ProjectReference Include="..\..\src\FlowTerminal.Domain\FlowTerminal.Domain.csproj" />
+    <ProjectReference Include="..\..\src\FlowTerminal.MarketData\FlowTerminal.MarketData.csproj" />
+    <ProjectReference Include="..\..\src\FlowTerminal.Storage\FlowTerminal.Storage.csproj" />
   </ItemGroup>
 
 </Project>

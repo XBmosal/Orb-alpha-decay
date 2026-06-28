@@ -8,9 +8,10 @@ A feature is only marked **Complete** when its source exists, is wired into the
 app, the solution compiles, tests exist and pass, and limitations are documented.
 A button/view/interface/mock value alone never counts as complete.
 
-> Current milestone: **Phases 0–4 delivered.** The cross-platform core (23
-> projects) builds on Linux/CI; the WPF shell builds on Windows. 120 tests pass,
-> including headless SkiaSharp pixel tests of the mandated candle colors.
+> Current milestone: **Phases 0–5 delivered.** The cross-platform core (23
+> projects) builds on Linux/CI; the WPF shell builds on Windows. 131 tests pass,
+> including headless SkiaSharp pixel tests of the mandated candle colors and
+> end-to-end record → DuckDB inspect → deterministic replay.
 
 ## Phase 0 — Repository foundation
 | Feature | Status | Notes |
@@ -73,10 +74,20 @@ A button/view/interface/mock value alone never counts as complete.
 | Workspace state (JSON) | Complete · Tested | Round-trips; SQLite persistence in Phase 5. |
 | WPF shell wired to live mock feed | Mock · Windows-only | Pipeline off-thread; 30 FPS coalesced render. Runtime verified on Windows. |
 
-## Phases 5–10 — Not started / scaffolded
+## Phase 5 — Recording & replay
+| Feature | Status | Notes |
+|---|---|---|
+| Parquet recorder (batched, atomic) | Complete · Tested | Ordered part files; temp+rename; never rewrites the session per event. |
+| Parquet replay source | Complete · Tested | In-order; corrupt/partial part detected and skipped (`CorruptParts`). |
+| SQLite repositories + migrations | Complete · Tested | Settings/workspaces/notes; `user_version` migrations; WAL; reopen-survives. |
+| DuckDB inspection | Complete · Tested | Query parts via glob; counts + per-type breakdown. |
+| ReplayValidator (hash compare) | Complete · Tested | Two passes, identical state hash; CLI wired. |
+| DataInspector / ReplayValidator CLIs | Complete | Wired to the real engines. |
+| End-to-end record→inspect→validate | Complete · Tested | Integration test. |
+
+## Phases 6–10 — Not started / scaffolded
 | Phase | Status |
 |---|---|
-| 5 Recording & replay (Parquet/SQLite/DuckDB, ReplayValidator) | Interface only |
 | 6 Heatmap & advanced DOM | Not started |
 | 7 Detectors | Not started |
 | 8 Rithmic live adapter | Blocked (SDK) |

@@ -3,6 +3,13 @@
   <ItemGroup>
     <ProjectReference Include="..\FlowTerminal.Domain\FlowTerminal.Domain.csproj" />
     <ProjectReference Include="..\FlowTerminal.MarketData\FlowTerminal.MarketData.csproj" />
+    <ProjectReference Include="..\FlowTerminal.Notes\FlowTerminal.Notes.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="DuckDB.NET.Data.Full" Version="1.1.3" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.10" />
+    <PackageReference Include="Parquet.Net" Version="4.25.0" />
   </ItemGroup>
 
   <PropertyGroup>
