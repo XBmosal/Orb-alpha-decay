@@ -36,6 +36,31 @@ public sealed class ChartOverlayRenderer
         {
             DrawVwap(canvas, vp, overlays);
         }
+
+        if (enabled.Contains("TPO"))
+        {
+            DrawTpo(canvas, vp, overlays);
+        }
+    }
+
+    private void DrawTpo(SKCanvas canvas, ChartViewport vp, ChartOverlays o)
+    {
+        if (o.Tpo.Count == 0) return;
+        float rowH = vp.PlotHeight / Math.Max(1, vp.MaxPriceTicks - vp.MinPriceTicks);
+        using var text = new SKPaint
+        {
+            Color = _palette.MutedText.ToSkColor(),
+            IsAntialias = true,
+            Typeface = SKTypeface.Default,
+            TextSize = Math.Clamp(rowH * 0.8f, 7f, 11f),
+        };
+
+        foreach (var row in o.Tpo)
+        {
+            if (row.PriceTicks < vp.MinPriceTicks || row.PriceTicks >= vp.MaxPriceTicks || row.Letters.Length == 0) continue;
+            float y = vp.PriceToY(row.PriceTicks);
+            canvas.DrawText(row.Letters, vp.PlotLeft + 2, y + text.TextSize * 0.35f, text);
+        }
     }
 
     private void DrawProfile(SKCanvas canvas, ChartViewport vp, ChartOverlays o)

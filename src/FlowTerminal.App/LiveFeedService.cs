@@ -1,6 +1,7 @@
 using FlowTerminal.Analytics.Bars;
 using FlowTerminal.Analytics.Delta;
 using FlowTerminal.Analytics.Detectors;
+using FlowTerminal.Analytics.Footprints;
 using FlowTerminal.Analytics.PriceAction;
 using FlowTerminal.Analytics.Profiles;
 using FlowTerminal.Analytics.Vwap;
@@ -55,8 +56,12 @@ public sealed class LiveFeedService : IAsyncDisposable
     private readonly FairValueGapDetector _fvg = new();
     private readonly List<FvgBox> _fvgs = new();
     private readonly TradingCalendar _calendar = new();
+    private readonly List<Footprint> _barFootprints = new();
+    private Footprint _currentFootprint = new();
+    private TpoProfile? _tpo;
     private OpeningRangeBreakout? _orb;
     private int _barsEvicted;
+    private const int FootprintBars = 20;
     private readonly LiquidityHeatmap _heatmap = new(TimeSpan.FromMilliseconds(250));
     private readonly HeatmapRenderer _heatmapRenderer = new();
     private readonly DetectorEngine _detectors = new(RootSymbol.NQ);
@@ -112,6 +117,9 @@ public sealed class LiveFeedService : IAsyncDisposable
                 _cvd.Add(e);
                 _tape.Add(e);
                 _multiVwap.AddTrade(e.PriceTicks, e.Quantity, _calendar.TradingDate(e.ExchangeTimestampUtc));
+                _currentFootprint.AddTrade(e);
+                _tpo ??= new TpoProfile(e.ExchangeTimestampUtc);
+                _tpo.AddTrade(e.PriceTicks, e.ExchangeTimestampUtc);
 
                 // Opening-range breakout: 5-minute range from the first trade seen.
                 _orb ??= new OpeningRangeBreakout(e.ExchangeTimestampUtc.AddMinutes(5));
@@ -122,6 +130,8 @@ public sealed class LiveFeedService : IAsyncDisposable
                     _detectors.OnBar(completed);
                     _completed.Add(completed);
                     _vwapByBar.Add(_multiVwap.Daily.VwapTicks);
+                    _barFootprints.Add(_currentFootprint);
+                    _currentFootprint = new Footprint();
 
                     int absoluteIndex = _barsEvicted + _completed.Count - 1;
                     if (_fvg.OnBar(completed) is { } gap)
@@ -135,6 +145,7 @@ public sealed class LiveFeedService : IAsyncDisposable
                         int remove = _completed.Count - MaxChartBars;
                         _completed.RemoveRange(0, remove);
                         _vwapByBar.RemoveRange(0, remove);
+                        _barFootprints.RemoveRange(0, remove);
                         _barsEvicted += remove;
                     }
                 }
@@ -172,12 +183,40 @@ public sealed class LiveFeedService : IAsyncDisposable
                 }
             }
 
+            // Footprint columns for the most recent bars (for the footprint view).
+            var footprint = new List<FootprintColumn>();
+            int fpStart = Math.Max(0, _completed.Count - FootprintBars);
+            for (int i = fpStart; i < _completed.Count; i++)
+            {
+                var bar = _completed[i];
+                var fp = _barFootprints[i];
+                var cells = new List<FootprintCell>();
+                foreach (var lvl in fp.Levels())
+                {
+                    cells.Add(new FootprintCell(lvl.PriceTicks, lvl.SellVolume, lvl.BuyVolume));
+                }
+
+                footprint.Add(new FootprintColumn(bar.OpenTicks, bar.CloseTicks, bar.HighTicks, bar.LowTicks, cells));
+            }
+
+            // TPO rows (lettered brackets per price) over the session.
+            var tpoRows = new List<TpoRow>();
+            if (_tpo is not null)
+            {
+                foreach (var lvl in _profile.Levels())
+                {
+                    string letters = _tpo.LettersAt(lvl.PriceTicks);
+                    if (letters.Length > 0) tpoRows.Add(new TpoRow(lvl.PriceTicks, letters));
+                }
+            }
+
             var va = _profile.ComputeValueArea();
             var overlays = new ChartOverlays(
                 _profile.Levels(), _profile.PocTicks(), va.VahTicks, va.ValTicks,
                 vwap, fvgs,
                 _orb is { IsEstablished: true } orb ? orb.HighTicks : null,
-                _orb is { IsEstablished: true } orb2 ? orb2.LowTicks : null);
+                _orb is { IsEstablished: true } orb2 ? orb2.LowTicks : null,
+                footprint, tpoRows);
 
             var dom = ReadOnlyDom.Build(_book, _profile, 12);
             return new ChartSnapshot(

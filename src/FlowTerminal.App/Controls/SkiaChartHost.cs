@@ -18,6 +18,7 @@ public sealed class SkiaChartHost : SKElement
 {
     private readonly CandlestickRenderer _renderer = new();
     private readonly ChartOverlayRenderer _overlays = new();
+    private readonly FootprintRenderer _footprint = new();
     private IReadOnlyList<Bar> _bars = Array.Empty<Bar>();
     private ChartOverlays _overlayData = ChartOverlays.Empty;
     private StudyState? _studies;
@@ -41,6 +42,13 @@ public sealed class SkiaChartHost : SKElement
         if (_bars.Count == 0 || w <= 0 || h <= 0)
         {
             canvas.Clear(_renderer.Palette.Background.ToSkColor());
+            return;
+        }
+
+        // Footprint mode replaces the candle view with wide bid×ask columns.
+        if (_studies is not null && _studies.IsEnabled("FP") && _overlayData.Footprint.Count > 0)
+        {
+            _footprint.Render(canvas, new SKRect(0, 0, w, h), _overlayData.Footprint);
             return;
         }
 
