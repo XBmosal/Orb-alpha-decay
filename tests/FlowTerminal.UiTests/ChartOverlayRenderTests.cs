@@ -106,6 +106,64 @@ public class ChartOverlayRenderTests
     }
 
     [Fact]
+    public void Footprint_Draws_Green_Buys_Right_And_Purple_Sells_Left()
+    {
+        // A tall, single, wide column where the per-tick rows are far too short for
+        // numbers: the colored bid/ask cluster bars must still render so the chart is
+        // never empty. Ask volume (buys) → green to the right of center; bid volume
+        // (sells) → purple to the left.
+        var cells = new List<FootprintCell>();
+        for (long p = 100; p < 260; p++) // 160 price rows over 200px → ~1px rows, not legible
+        {
+            cells.Add(new FootprintCell(p, BidVolume: 90, AskVolume: 90));
+        }
+
+        var columns = new[] { new FootprintColumn(150, 210, 260, 100, cells) };
+        using var bmp = new SKBitmap(400, 200);
+        using var canvas = new SKCanvas(bmp);
+        canvas.Clear(SKColors.Black);
+        new FootprintRenderer().Render(canvas, new SKRect(0, 0, 400, 200), columns);
+
+        // Center of the single wide column (plot width = 400 - 64 gutter).
+        int cx = (int)((400 - 64) / 2f);
+        bool greenRight = false, purpleLeft = false;
+        for (int yy = 20; yy < 180; yy++)
+        {
+            for (int x = cx + 4; x < cx + 120 && !greenRight; x++)
+            {
+                var p = bmp.GetPixel(x, yy);
+                if (p.Green > p.Red && p.Green > p.Blue && p.Green > 60) greenRight = true;
+            }
+
+            for (int x = cx - 120; x < cx - 4 && !purpleLeft; x++)
+            {
+                var p = bmp.GetPixel(x, yy);
+                if (p.Blue > p.Green && p.Red > p.Green && p.Blue > 60) purpleLeft = true;
+            }
+        }
+
+        Assert.True(greenRight, "expected green ask (buy) bars to the right of center");
+        Assert.True(purpleLeft, "expected purple bid (sell) bars to the left of center");
+    }
+
+    [Fact]
+    public void Footprint_Empty_Shows_Hint_Not_Blank()
+    {
+        using var bmp = new SKBitmap(400, 200);
+        using var canvas = new SKCanvas(bmp);
+        new FootprintRenderer().Render(canvas, new SKRect(0, 0, 400, 200), Array.Empty<FootprintColumn>());
+
+        bool nonBlack = false;
+        for (int x = 0; x < 400 && !nonBlack; x += 2)
+        for (int yy = 0; yy < 200 && !nonBlack; yy += 2)
+        {
+            if (bmp.GetPixel(x, yy) != SKColors.Black) nonBlack = true;
+        }
+
+        Assert.True(nonBlack, "empty footprint should still draw a hint, not a blank panel");
+    }
+
+    [Fact]
     public void Disabled_Studies_Draw_Nothing()
     {
         var overlays = ChartOverlays.Empty with { VwapByBar = Enumerable.Repeat(100.0, 10).ToList() };

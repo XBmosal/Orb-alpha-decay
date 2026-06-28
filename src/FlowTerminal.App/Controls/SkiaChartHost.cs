@@ -31,6 +31,9 @@ public sealed class SkiaChartHost : SKElement
     private StudyState? _studies;
     private readonly int _maxVisibleBars = 120;
 
+    /// <summary>Tick size for axis price labels (NQ/ES = 0.25). Set from the instrument spec.</summary>
+    public decimal TickSize { get; set; } = 0.25m;
+
     // Pan state: number of bars the view is scrolled back from the live right edge.
     // 0 means "follow live". Mouse drag adjusts it; it is clamped to the history.
     private int _panBars;
@@ -109,7 +112,7 @@ public sealed class SkiaChartHost : SKElement
         // Footprint mode replaces the candle view with wide bid×ask columns.
         if (_studies is not null && _studies.IsEnabled("FP") && _overlayData.Footprint.Count > 0)
         {
-            _footprint.Render(canvas, new SKRect(0, 0, w, h), _overlayData.Footprint);
+            _footprint.Render(canvas, new SKRect(0, 0, w, h), _overlayData.Footprint, TickSize);
             return;
         }
 

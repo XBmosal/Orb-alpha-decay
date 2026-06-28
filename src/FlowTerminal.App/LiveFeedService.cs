@@ -62,7 +62,7 @@ public sealed class LiveFeedService : IAsyncDisposable
     private OpeningRangeBreakout? _orb;
     private int _barsEvicted;
     private long _lastWarmPriceTicks;
-    private const int FootprintBars = 20;
+    private const int FootprintBars = 12; // few, wide columns so the cluster is legible
 
     // Warm-start sizing: aim for ~50 bars of recent synthetic history at the current
     // timeframe, but cap the replay span so even high timeframes stay responsive.

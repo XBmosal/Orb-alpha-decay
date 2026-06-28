@@ -213,6 +213,7 @@ public partial class MainWindow : Window
     {
         _contract = new ContractCalendar().SuggestActive(RootSymbol.NQ, DateOnly.FromDateTime(DateTime.UtcNow));
         ContractText.Text = _contract.FullSymbol;
+        Chart.TickSize = _contract.Spec.TickSize;
         UpdateInstrumentTitle();
         await _feed.StartAsync(_contract);
         Heatmap.Attach(_feed);
