@@ -8,8 +8,8 @@ A feature is only marked **Complete** when its source exists, is wired into the
 app, the solution compiles, tests exist and pass, and limitations are documented.
 A button/view/interface/mock value alone never counts as complete.
 
-> Current milestone: **Phase 0 + Phase 1 + Phase 2 delivered.** The cross-platform
-> core (23 projects) builds on Linux/CI; the WPF shell builds on Windows.
+> Current milestone: **Phases 0–3 delivered.** The cross-platform core (23
+> projects) builds on Linux/CI; the WPF shell builds on Windows. 102 tests pass.
 
 ## Phase 0 — Repository foundation
 | Feature | Status | Notes |
@@ -51,10 +51,19 @@ A button/view/interface/mock value alone never counts as complete.
 | Book checkpoints (replay seeking) | Complete · Tested | Restore + apply-rest == full replay (`CheckpointSeekTests`). |
 | Order-book benchmark | Complete | `OrderBookBenchmark` (apply throughput + allocations). |
 
-## Phases 3–10 — Not started / scaffolded
+## Phase 3 — Bars & core analytics
+| Feature | Status | Notes |
+|---|---|---|
+| Time / tick / volume / range bars | Complete · Tested | Exact-fixture OHLC + delta. |
+| Delta & CVD | Complete · Tested | O(1) incremental; unknown aggressor neutral. |
+| Volume profile (POC / VAH / VAL) | Complete · Tested | Developing = on-demand query; safe when empty. |
+| Footprints + diagonal/horizontal imbalance | Complete · Tested | Documented formula; zero-denominator safe (no NaN/Inf). |
+| VWAP + std-dev bands | Complete · Tested | Incremental; daily/weekly/anchored via Reset. |
+| Live == replay analytics | Complete · Tested | Same code path; determinism test. |
+
+## Phases 4–10 — Not started / scaffolded
 | Phase | Status |
 |---|---|
-| 3 Bars & analytics (footprints, delta, CVD, profile, VWAP) | Not started |
 | 4 Core UI (Skia charts, DOM, T&S) | Not started (shell + palette done) |
 | 5 Recording & replay (Parquet/SQLite/DuckDB, ReplayValidator) | Interface only |
 | 6 Heatmap & advanced DOM | Not started |
