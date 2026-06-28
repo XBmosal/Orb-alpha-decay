@@ -11,7 +11,13 @@
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
     <Deterministic>true</Deterministic>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
-    <InvariantGlobalization>true</InvariantGlobalization>
+    <!--
+      Do NOT enable globalization-invariant MODE: WPF's font/text layout requires
+      real cultures (e.g. "en") and throws CultureNotFoundException in invariant
+      mode (MS.Internal.FontCache.MajorLanguages). Code that needs locale-stable
+      formatting uses CultureInfo.InvariantCulture explicitly instead.
+    -->
+    <InvariantGlobalization>false</InvariantGlobalization>
     <Authors>Flow Terminal</Authors>
     <Product>Flow Terminal</Product>
     <NeutralLanguage>en-US</NeutralLanguage>
