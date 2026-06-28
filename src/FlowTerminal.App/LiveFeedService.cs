@@ -66,7 +66,7 @@ public sealed class LiveFeedService : IAsyncDisposable
 
     // Warm-start sizing: aim for ~50 bars of recent synthetic history at the current
     // timeframe, but cap the replay span so even high timeframes stay responsive.
-    private const int TargetWarmBars = 50;
+    private const int TargetWarmBars = 100; // enough history that the chart can be panned
     private const int MinWarmMinutes = 20;
     private const int MaxWarmMinutes = 480; // ~8h cap keeps even high-TF switches ~2s
 

@@ -39,7 +39,7 @@ public sealed class SkiaChartHost : SKElement
     public decimal TickSize { get; set; } = 0.25m;
 
     // View transform state.
-    private int _visibleBars = 120;   // horizontal zoom (time)
+    private int _visibleBars = 60;    // horizontal zoom (time)
     private double _priceZoom = 1.0;   // vertical zoom (price); >1 = taller candles
     private int _panBars;              // bars scrolled back from the live right edge
 
@@ -88,20 +88,12 @@ public sealed class SkiaChartHost : SKElement
     protected override void OnMouseMove(MouseEventArgs e)
     {
         base.OnMouseMove(e);
-        var pos = e.GetPosition(this);
-
         if (_drag == DragMode.None)
         {
-            // Hover feedback so the zoom regions are discoverable.
-            Cursor = RegionAt(pos) switch
-            {
-                DragMode.PriceZoom => Cursors.SizeNS,
-                DragMode.TimeZoom => Cursors.SizeWE,
-                _ => Cursors.Hand,
-            };
             return;
         }
 
+        var pos = e.GetPosition(this);
         switch (_drag)
         {
             case DragMode.Pan:
