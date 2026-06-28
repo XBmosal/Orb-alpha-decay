@@ -10,6 +10,33 @@ behind the `RITHMIC_SDK` compile-time symbol. Until the SDK is installed and wir
 every Rithmic call fails loudly via `RithmicSdkUnavailableException` and the app
 runs in mock/replay mode. **No SDK behavior is fabricated.**
 
+## Important: a data subscription is NOT the same as API access
+
+Connecting your **own** app to Rithmic requires **R|API+ programmatic API access**,
+which is separate from (and additional to) a market-data subscription:
+
+- Third-party platforms (Sierra Chart, Bookmap, ATAS, Quantower, R|Trader Pro, …)
+  are **licensed/conformed Rithmic API applications**. They authenticate with your
+  user id + password against a system/gateway using Rithmic's protocol/SDK — there
+  is no "no-API" connection.
+- Many prop firms/FCMs provision **data-only** logins that work in those approved
+  platforms but **do not enable R|API+** for a custom app. (Observed example: a
+  funded-account firm using System = its own name, Gateway = Chicago Area, with CME
+  depth as a paid add-on, but **no API access** for self-built apps.)
+- Before paying for any "Rithmic subscription", confirm with the seller: *"Does this
+  include R|API+ developer access and the SDK for a self-developed .NET app for
+  personal use, and is API login enabled on my account/system?"* A cheap data plan
+  alone usually does not.
+- Do **not** attempt to replicate R|Trader Pro by reverse-engineering the Rithmic
+  protocol or automating the GUI — it violates Rithmic's terms and this project's
+  rules. If a source won't grant R|API+ access, use mock/replay or a vendor with a
+  documented self-serve API instead.
+
+The SDK-independent connection resilience the adapter relies on
+(`StaleFeedMonitor`, `ReconnectPolicy`, `SubscriptionRegistry`) is already
+implemented and tested in `FlowTerminal.MarketData.Resilience`, so once the SDK is
+installed only the protocol calls remain to be wired.
+
 ## Steps
 1. **Obtain authorized access** from Rithmic, your broker, an FCM, a funding
    evaluator, or another authorized provider. Confirm credentials and the

@@ -120,10 +120,19 @@ A button/view/interface/mock value alone never counts as complete.
 | Persistence wired into shell | Complete | SQLite + repos + screenshot store registered in DI. |
 | Notes/review WPF panel | Not started | Data layer complete; entry/filter/jump UI is remaining UI work. |
 
-## Phases 8 & 10 — Remaining
+## Phase 8 — Rithmic live adapter (partial; SDK-blocked)
+| Feature | Status | Notes |
+|---|---|---|
+| Adapter boundary (compile-time `RITHMIC_SDK`) | Complete | No fabricated SDK behavior; mock build never needs it. |
+| Capability detection model | Complete · Tested | `ProviderCapabilities`; unavailable features disabled gracefully. |
+| Stale-feed detection | Complete · Tested | `StaleFeedMonitor` (provider-agnostic). |
+| Reconnect backoff | Complete · Tested | `ReconnectPolicy` (deterministic exponential). |
+| Subscription restoration | Complete · Tested | `SubscriptionRegistry`. |
+| Live auth / depth / historical (SDK calls) | **Blocked (SDK)** | Requires authorized R\|API+ SDK + API-enabled account. |
+
+## Phase 10 — Remaining
 | Phase | Status |
 |---|---|
-| 8 Rithmic live adapter | **Blocked (SDK)** — boundary in place; needs authorized R\|API+ SDK. |
 | 10 Packaging & stabilization | Not started |
 
 ## Known limitations (current)
