@@ -23,6 +23,37 @@ public partial class App : Application
     {
         base.OnStartup(e);
 
+        // Fail loudly, not silently: surface any unhandled error with a log + dialog
+        // so an early-beta tester gets a diagnosable message instead of a vanishing window.
+        DispatcherUnhandledException += (_, args) =>
+        {
+            Log.Fatal(args.Exception, "Unhandled UI exception");
+            ShowFatal(args.Exception);
+            args.Handled = true;
+        };
+        AppDomain.CurrentDomain.UnhandledException += (_, args) =>
+        {
+            if (args.ExceptionObject is Exception ex)
+            {
+                Log.Fatal(ex, "Unhandled domain exception");
+                ShowFatal(ex);
+            }
+        };
+
+        try
+        {
+            Start();
+        }
+        catch (Exception ex)
+        {
+            Log.Fatal(ex, "Startup failed");
+            ShowFatal(ex);
+            Shutdown(1);
+        }
+    }
+
+    private void Start()
+    {
         var paths = new AppPaths().EnsureCreated();
 
         Log.Logger = new LoggerConfiguration()
@@ -60,6 +91,21 @@ public partial class App : Application
 
         var window = _host.Services.GetRequiredService<MainWindow>();
         window.Show();
+    }
+
+    private static void ShowFatal(Exception ex)
+    {
+        try
+        {
+            MessageBox.Show(
+                $"Flow Terminal hit an error and needs attention.\n\n{ex.GetType().Name}: {ex.Message}\n\n" +
+                "A detailed log was written under %LOCALAPPDATA%\\FlowTerminal\\logs.",
+                "Flow Terminal — error", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        catch
+        {
+            // If even the dialog fails, the log already captured it.
+        }
     }
 
     protected override void OnExit(ExitEventArgs e)
