@@ -15,11 +15,17 @@ public sealed class ChartOverlayRenderer
 
     public ChartOverlayRenderer(ChartPalette? palette = null) => _palette = palette ?? ChartPalette.Default;
 
-    public void Render(SKCanvas canvas, ChartViewport vp, ChartOverlays overlays, IReadOnlySet<string> enabled)
+    /// <summary>
+    /// Draws the enabled overlays. When <paramref name="profileBand"/> is &gt; 0 the
+    /// volume profile is drawn in a reserved band of that pixel width immediately to
+    /// the right of the candle plot (so it never overlaps the candles); otherwise the
+    /// profile is drawn over the right side of the plot in the legacy style.
+    /// </summary>
+    public void Render(SKCanvas canvas, ChartViewport vp, ChartOverlays overlays, IReadOnlySet<string> enabled, float profileBand = 0f)
     {
         if (enabled.Contains("VBP") || enabled.Contains("BAC") || enabled.Contains("DP"))
         {
-            DrawProfile(canvas, vp, overlays);
+            DrawProfile(canvas, vp, overlays, profileBand);
         }
 
         if (enabled.Contains("ORB"))
@@ -63,14 +69,19 @@ public sealed class ChartOverlayRenderer
         }
     }
 
-    private void DrawProfile(SKCanvas canvas, ChartViewport vp, ChartOverlays o)
+    private void DrawProfile(SKCanvas canvas, ChartViewport vp, ChartOverlays o, float profileBand)
     {
         if (o.Profile.Count == 0) return;
 
         long max = 1;
         foreach (var lvl in o.Profile) max = Math.Max(max, lvl.TotalVolume);
 
-        float maxWidth = vp.PlotWidth * 0.28f;
+        // With a reserved band, anchor the histogram at the band's right edge (just
+        // past the candle plot) so it sits in its own column. Without one, fall back
+        // to drawing over the right of the plot.
+        bool banded = profileBand > 0f;
+        float maxWidth = banded ? profileBand : vp.PlotWidth * 0.28f;
+        float rightX = banded ? vp.PlotRight + profileBand : vp.PlotRight;
         float rowH = Math.Max(1f, vp.PlotHeight / Math.Max(1, vp.MaxPriceTicks - vp.MinPriceTicks));
 
         using var buy = new SKPaint { Color = _palette.BullishCandle.WithAlpha(110).ToSkColor(), IsAntialias = false };
@@ -82,14 +93,14 @@ public sealed class ChartOverlayRenderer
             float y = vp.PriceToY(lvl.PriceTicks) - rowH / 2f;
             float w = maxWidth * (lvl.TotalVolume / (float)max);
             float bw = lvl.TotalVolume > 0 ? w * (lvl.BuyVolume / (float)lvl.TotalVolume) : 0;
-            float x = vp.PlotRight - w;
+            float x = rightX - w;
             canvas.DrawRect(x, y, bw, rowH, buy);
             canvas.DrawRect(x + bw, y, w - bw, rowH, sell);
         }
 
-        DrawHLine(canvas, vp, o.PocTicks, _palette.Warning, 1.6f);
-        DrawHLine(canvas, vp, o.VahTicks, _palette.MutedText, 1f);
-        DrawHLine(canvas, vp, o.ValTicks, _palette.MutedText, 1f);
+        DrawHLine(canvas, vp, o.PocTicks, _palette.Warning, 1.6f, rightX);
+        DrawHLine(canvas, vp, o.VahTicks, _palette.MutedText, 1f, rightX);
+        DrawHLine(canvas, vp, o.ValTicks, _palette.MutedText, 1f, rightX);
     }
 
     private void DrawVwap(SKCanvas canvas, ChartViewport vp, ChartOverlays o)
@@ -133,11 +144,12 @@ public sealed class ChartOverlayRenderer
         if (o.OrbLowTicks is { } lo) DrawHLine(canvas, vp, lo, _palette.BidLiquidity, 1.4f);
     }
 
-    private static void DrawHLine(SKCanvas canvas, ChartViewport vp, long priceTicks, RgbaColor color, float width)
+    private static void DrawHLine(SKCanvas canvas, ChartViewport vp, long priceTicks, RgbaColor color, float width, float rightX = float.NaN)
     {
         if (priceTicks == long.MinValue || priceTicks < vp.MinPriceTicks || priceTicks >= vp.MaxPriceTicks) return;
         float y = vp.PriceToY(priceTicks);
+        float right = float.IsNaN(rightX) ? vp.PlotRight : rightX;
         using var paint = new SKPaint { Color = color.ToSkColor(), Style = SKPaintStyle.Stroke, StrokeWidth = width, IsAntialias = true };
-        canvas.DrawLine(vp.PlotLeft, y, vp.PlotRight, y, paint);
+        canvas.DrawLine(vp.PlotLeft, y, right, y, paint);
     }
 }

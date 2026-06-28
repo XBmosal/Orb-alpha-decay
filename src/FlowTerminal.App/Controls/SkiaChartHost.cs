@@ -184,26 +184,33 @@ public sealed class SkiaChartHost : SKElement
         long max = (long)Math.Ceiling(center + half);
         if (max <= min) max = min + 1;
 
+        // If a volume profile is enabled, reserve a band on the right so the histogram
+        // sits in its own column and the candles stop before it (no overlap).
+        float totalRight = w - RightAxisWidth;
+        bool profileOn = _studies is not null &&
+            (_studies.IsEnabled("VBP") || _studies.IsEnabled("BAC") || _studies.IsEnabled("DP"));
+        float profileBand = profileOn ? Math.Min(totalRight * 0.18f, 200f) : 0f;
+
         var viewport = new ChartViewport(
             w, h, min, max, first, visible,
-            leftPadding: 0f, rightAxisWidth: RightAxisWidth,
+            leftPadding: 0f, rightAxisWidth: RightAxisWidth + profileBand,
             topPadding: TopPadding, bottomPadding: BottomAxisHeight);
         _lastBarSlotWidth = viewport.BarSlotWidth;
 
-        // Clip the candles/overlays to the plot rect so price-zoomed bars do not bleed
-        // into the axis gutters.
-        var plot = new SKRect(viewport.PlotLeft, viewport.PlotTop, viewport.PlotRight, viewport.PlotBottom);
+        // Clip to the candles + profile band so price-zoomed bars do not bleed into the
+        // axis gutters, while still letting the profile draw in its reserved band.
+        var plot = new SKRect(viewport.PlotLeft, viewport.PlotTop, totalRight, viewport.PlotBottom);
         canvas.Save();
         canvas.ClipRect(plot);
         _renderer.Render(canvas, viewport, _bars);
         if (_studies is { Enabled.Count: > 0 } studies)
         {
-            _overlays.Render(canvas, viewport, _overlayData, studies.Enabled);
+            _overlays.Render(canvas, viewport, _overlayData, studies.Enabled, profileBand);
         }
 
         canvas.Restore();
 
-        DrawPriceAxis(canvas, viewport);
+        DrawPriceAxis(canvas, viewport, totalRight);
         DrawTimeAxis(canvas, viewport, first, visible);
 
         if (_panBars > 0)
@@ -212,7 +219,7 @@ public sealed class SkiaChartHost : SKElement
         }
     }
 
-    private void DrawPriceAxis(SKCanvas canvas, ChartViewport vp)
+    private void DrawPriceAxis(SKCanvas canvas, ChartViewport vp, float axisX)
     {
         using var grid = new SKPaint { Color = _renderer.Palette.GridLine.WithAlpha(110).ToSkColor(), Style = SKPaintStyle.Stroke, StrokeWidth = 1 };
         using var text = TextPaint(10f);
@@ -222,9 +229,9 @@ public sealed class SkiaChartHost : SKElement
         {
             long priceTicks = vp.MinPriceTicks + span * i / lines;
             float y = vp.PriceToY(priceTicks);
-            canvas.DrawLine(vp.PlotLeft, y, vp.PlotRight, y, grid);
+            canvas.DrawLine(vp.PlotLeft, y, axisX, y, grid);
             decimal price = priceTicks * TickSize;
-            canvas.DrawText(price.ToString("N2", CultureInfo.InvariantCulture), vp.PlotRight + 6, y + 3.5f, text);
+            canvas.DrawText(price.ToString("N2", CultureInfo.InvariantCulture), axisX + 6, y + 3.5f, text);
         }
     }
 
