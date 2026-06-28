@@ -1,13 +1,17 @@
 using FlowTerminal.Analytics.Bars;
 using FlowTerminal.Analytics.Delta;
 using FlowTerminal.Analytics.Detectors;
+using FlowTerminal.Analytics.PriceAction;
 using FlowTerminal.Analytics.Profiles;
+using FlowTerminal.Analytics.Vwap;
 using FlowTerminal.Charting;
 using FlowTerminal.Charting.Dom;
 using FlowTerminal.Charting.Heatmap;
+using FlowTerminal.Charting.Overlays;
 using FlowTerminal.Charting.Tape;
 using FlowTerminal.Domain.Events;
 using FlowTerminal.Domain.Instruments;
+using FlowTerminal.Domain.Sessions;
 using FlowTerminal.MarketData.Abstractions;
 using FlowTerminal.MarketData.Pipeline;
 using FlowTerminal.MarketData.Synthetic;
@@ -25,7 +29,8 @@ public sealed record ChartSnapshot(
     string? BookInvalidReason,
     DiagnosticsSnapshot Diagnostics,
     IReadOnlyList<Detection> Detections,
-    long TotalDetections);
+    long TotalDetections,
+    ChartOverlays Overlays);
 
 /// <summary>
 /// Drives a mock (or, when wired, live) feed through the canonical pipeline and the
@@ -45,6 +50,13 @@ public sealed class LiveFeedService : IAsyncDisposable
     private readonly TimeAndSalesModel _tape = new();
     private readonly IBarAggregator _bars = BarAggregator.Time(TimeSpan.FromMinutes(1));
     private readonly List<Bar> _completed = new();
+    private readonly List<double> _vwapByBar = new();
+    private readonly MultiVwap _multiVwap = new();
+    private readonly FairValueGapDetector _fvg = new();
+    private readonly List<FvgBox> _fvgs = new();
+    private readonly TradingCalendar _calendar = new();
+    private OpeningRangeBreakout? _orb;
+    private int _barsEvicted;
     private readonly LiquidityHeatmap _heatmap = new(TimeSpan.FromMilliseconds(250));
     private readonly HeatmapRenderer _heatmapRenderer = new();
     private readonly DetectorEngine _detectors = new(RootSymbol.NQ);
@@ -99,13 +111,31 @@ public sealed class LiveFeedService : IAsyncDisposable
                 _profile.AddTrade(e);
                 _cvd.Add(e);
                 _tape.Add(e);
+                _multiVwap.AddTrade(e.PriceTicks, e.Quantity, _calendar.TradingDate(e.ExchangeTimestampUtc));
+
+                // Opening-range breakout: 5-minute range from the first trade seen.
+                _orb ??= new OpeningRangeBreakout(e.ExchangeTimestampUtc.AddMinutes(5));
+                _orb.OnTrade(e.PriceTicks, e.ExchangeTimestampUtc);
+
                 if (_bars.AddTrade(e) is { } completed)
                 {
                     _detectors.OnBar(completed);
                     _completed.Add(completed);
+                    _vwapByBar.Add(_multiVwap.Daily.VwapTicks);
+
+                    int absoluteIndex = _barsEvicted + _completed.Count - 1;
+                    if (_fvg.OnBar(completed) is { } gap)
+                    {
+                        _fvgs.Add(new FvgBox(absoluteIndex, gap.Direction, gap.TopTicks, gap.BottomTicks));
+                        if (_fvgs.Count > 64) _fvgs.RemoveRange(0, _fvgs.Count - 64);
+                    }
+
                     if (_completed.Count > MaxChartBars)
                     {
-                        _completed.RemoveRange(0, _completed.Count - MaxChartBars);
+                        int remove = _completed.Count - MaxChartBars;
+                        _completed.RemoveRange(0, remove);
+                        _vwapByBar.RemoveRange(0, remove);
+                        _barsEvicted += remove;
                     }
                 }
             }
@@ -121,16 +151,39 @@ public sealed class LiveFeedService : IAsyncDisposable
         {
             var bars = new List<Bar>(_completed.Count + 1);
             bars.AddRange(_completed);
+
+            // VWAP series aligned to the bar list (developing bar gets the live value).
+            var vwap = new List<double>(_vwapByBar.Count + 1);
+            vwap.AddRange(_vwapByBar);
             if (_bars.HasDeveloping)
             {
                 bars.Add(_bars.Developing);
+                vwap.Add(_multiVwap.Daily.VwapTicks);
             }
+
+            // FVG boxes rebased to the current (post-eviction) bar indexing.
+            var fvgs = new List<FvgBox>(_fvgs.Count);
+            foreach (var f in _fvgs)
+            {
+                int rel = f.BarIndex - _barsEvicted;
+                if (rel >= 0 && rel < bars.Count)
+                {
+                    fvgs.Add(f with { BarIndex = rel });
+                }
+            }
+
+            var va = _profile.ComputeValueArea();
+            var overlays = new ChartOverlays(
+                _profile.Levels(), _profile.PocTicks(), va.VahTicks, va.ValTicks,
+                vwap, fvgs,
+                _orb is { IsEstablished: true } orb ? orb.HighTicks : null,
+                _orb is { IsEstablished: true } orb2 ? orb2.LowTicks : null);
 
             var dom = ReadOnlyDom.Build(_book, _profile, 12);
             return new ChartSnapshot(
                 bars, dom, _cvd.CumulativeDelta, _tape.Latest(50),
                 _book.IsValid, _book.InvalidReason, _diagnostics.Snapshot(),
-                _detectors.Recent(8), _detectors.TotalDetections);
+                _detectors.Recent(8), _detectors.TotalDetections, overlays);
         }
     }
 

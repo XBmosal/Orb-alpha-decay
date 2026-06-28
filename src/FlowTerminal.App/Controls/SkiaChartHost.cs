@@ -1,5 +1,6 @@
 using FlowTerminal.Analytics.Bars;
 using FlowTerminal.Charting;
+using FlowTerminal.Charting.Overlays;
 using SkiaSharp;
 using SkiaSharp.Views.Desktop;
 using SkiaSharp.Views.WPF;
@@ -7,20 +8,27 @@ using SkiaSharp.Views.WPF;
 namespace FlowTerminal.App.Controls;
 
 /// <summary>
-/// A single SkiaSharp-backed candlestick chart control. The entire chart is drawn
-/// on one canvas — there is NO WPF control per candle. The latest bar snapshot is
-/// supplied from the (off-thread) feed and the control repaints on a coalesced
-/// timer, so market processing is never tied to the visual frame rate.
+/// A single SkiaSharp-backed candlestick chart control with study overlays. The
+/// entire chart is drawn on one canvas — there is NO WPF control per candle. The
+/// latest bar/overlay snapshot is supplied from the (off-thread) feed and the
+/// control repaints on a coalesced timer, so market processing is never tied to the
+/// visual frame rate. Which overlays draw is controlled by the shared StudyState.
 /// </summary>
 public sealed class SkiaChartHost : SKElement
 {
     private readonly CandlestickRenderer _renderer = new();
+    private readonly ChartOverlayRenderer _overlays = new();
     private IReadOnlyList<Bar> _bars = Array.Empty<Bar>();
-    private int _maxVisibleBars = 120;
+    private ChartOverlays _overlayData = ChartOverlays.Empty;
+    private StudyState? _studies;
+    private readonly int _maxVisibleBars = 120;
 
-    public void UpdateBars(IReadOnlyList<Bar> bars)
+    public void Attach(StudyState studies) => _studies = studies;
+
+    public void UpdateFrame(IReadOnlyList<Bar> bars, ChartOverlays overlays)
     {
         _bars = bars;
+        _overlayData = overlays;
         InvalidateVisual();
     }
 
@@ -48,6 +56,12 @@ public sealed class SkiaChartHost : SKElement
 
         long pad = Math.Max(1, (max - min) / 20);
         var viewport = new ChartViewport(w, h, min - pad, max + pad, first, visible);
+
         _renderer.Render(canvas, viewport, _bars);
+
+        if (_studies is { Enabled.Count: > 0 } studies)
+        {
+            _overlays.Render(canvas, viewport, _overlayData, studies.Enabled);
+        }
     }
 }

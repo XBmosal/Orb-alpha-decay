@@ -21,6 +21,7 @@ public partial class MainWindow : Window
 {
     private readonly ShellViewModel _viewModel;
     private readonly LiveFeedService _feed = new();
+    private readonly StudyState _studyState = new();
     private readonly DispatcherTimer _renderTimer;
 
     public MainWindow(ShellViewModel viewModel)
@@ -30,6 +31,7 @@ public partial class MainWindow : Window
         DataContext = viewModel;
         ApplyViewModel();
 
+        Chart.Attach(_studyState);
         _renderTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(33) }; // ~30 FPS
         _renderTimer.Tick += OnRenderTick;
 
@@ -78,11 +80,17 @@ public partial class MainWindow : Window
             ToolTip = study.Description,
         };
 
-        if (study.DetectorKey is { } key)
+        // Chart-overlay studies are keyed by short code; detector-backed studies also
+        // toggle the live detector engine. Seed the initial state from the checkbox.
+        _studyState.Set(study.ShortCode, toggle.IsChecked == true);
+        void Apply(bool on)
         {
-            toggle.Checked += (_, _) => _feed.SetDetectorEnabled(key, true);
-            toggle.Unchecked += (_, _) => _feed.SetDetectorEnabled(key, false);
+            _studyState.Set(study.ShortCode, on);
+            if (study.DetectorKey is { } key) _feed.SetDetectorEnabled(key, on);
         }
+
+        toggle.Checked += (_, _) => Apply(true);
+        toggle.Unchecked += (_, _) => Apply(false);
 
         DockPanel.SetDock(toggle, Dock.Left);
         row.Children.Add(toggle);
@@ -127,7 +135,7 @@ public partial class MainWindow : Window
     private void OnRenderTick(object? sender, EventArgs e)
     {
         var snapshot = _feed.Snapshot();
-        Chart.UpdateBars(snapshot.Bars);
+        Chart.UpdateFrame(snapshot.Bars, snapshot.Overlays);
         Dom.UpdateRows(snapshot.Dom);
         CvdText.Text = snapshot.Cvd.ToString("N0");
         BookStateText.Text = snapshot.BookValid ? "Book: valid" : $"Book: INVALID ({snapshot.BookInvalidReason})";
