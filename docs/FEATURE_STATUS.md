@@ -130,10 +130,21 @@ A button/view/interface/mock value alone never counts as complete.
 | Subscription restoration | Complete · Tested | `SubscriptionRegistry`. |
 | Live auth / depth / historical (SDK calls) | **Blocked (SDK)** | Requires authorized R\|API+ SDK + API-enabled account. |
 
-## Phase 10 — Remaining
-| Phase | Status |
-|---|---|
-| 10 Packaging & stabilization | Not started |
+## Phase 10 — Packaging & stabilization
+| Feature | Status | Notes |
+|---|---|---|
+| Self-contained publish script | Complete | `build/publish.ps1` (win-x64, optional single-file). |
+| DataRepair (corrupt/partial files) | Complete · Tested | Detects bad parts + orphan `.tmp`; reversible quarantine; CLI wired. |
+| Long-session memory soak | Complete · Tested | 3M events; memory flat (~6→7 MB); zero drops; bounded queue. |
+| Packaging / upgrade / backup docs | Complete | `docs/PACKAGING.md`. |
+| Signed MSIX installer | Not started | Publish output ready; signing/MSIX is the remaining step (no cert committed). |
+
+## Remaining
+- **Phase 8 live Rithmic SDK calls** — blocked on the authorized R\|API+ SDK + an
+  API-enabled account.
+- **WPF panels** for notes/review entry and replay scrub controls — data layers
+  complete and tested; the entry/filter/scrub UI is the outstanding UI work.
+- **Signed MSIX installer** — publish output is ready; packaging/signing remains.
 
 ## Known limitations (current)
 - The WPF shell and `UiTests` requiring WPF build/run on **Windows only**; the

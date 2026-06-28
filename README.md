@@ -47,6 +47,7 @@ dotnet run -c Release --project src/FlowTerminal.App
 [Detectors](docs/DETECTORS.md) ·
 [Replay](docs/REPLAY.md) ·
 [Performance](docs/PERFORMANCE.md) ·
+[Packaging](docs/PACKAGING.md) ·
 [Security](docs/SECURITY.md) ·
 [Troubleshooting](docs/TROUBLESHOOTING.md) ·
 [User Guide](docs/USER_GUIDE.md) ·

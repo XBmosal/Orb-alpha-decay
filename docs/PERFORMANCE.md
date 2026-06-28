@@ -27,6 +27,20 @@ allocation diagnostics:
 dotnet run -c Release --project benchmarks/FlowTerminal.Benchmarks
 ```
 
+## Long-session memory stability (Phase 10 soak)
+`LongSessionSoakTests` drives **3,000,000** events through the full pipeline + order
+book + bars + CVD + volume profile and samples managed memory at the midpoint and
+end:
+
+```
+processed=3,000,000  bars=274  memMid=6MB  memEnd=7MB  maxQueue=65,536
+```
+
+Memory stays essentially flat (no unbounded queue/cache growth), the queue stays
+bounded, and **zero canonical events are dropped** — the stability goals for an
+8-hour session, validated in seconds. The test asserts end memory < 512 MB and
+second-half growth < 128 MB.
+
 ## Techniques used
 - Bounded `System.Threading.Channels` with `Wait` full-mode (backpressure, no drops).
 - One single-writer processor per instrument; no global lock on the hot path.
