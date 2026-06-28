@@ -7,15 +7,26 @@
         Background="{StaticResource BackgroundBrush}"
         WindowStartupLocation="CenterScreen">
 
+    <Window.Resources>
+        <!-- Subtle, grabbable splitter. Drag near a panel border to resize. -->
+        <Style TargetType="GridSplitter">
+            <Setter Property="Background" Value="{StaticResource GridBrush}" />
+            <Setter Property="Opacity" Value="0.5" />
+            <Setter Property="ShowsPreview" Value="True" />
+        </Style>
+    </Window.Resources>
+
     <Grid Margin="8">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />  <!-- Top status bar -->
-            <RowDefinition Height="*" />     <!-- Main chart + DOM -->
-            <RowDefinition Height="220" />   <!-- CVD/Profile + Time and Sales -->
-            <RowDefinition Height="Auto" />  <!-- Bottom tabs -->
+            <RowDefinition Height="Auto" />               <!-- 0 Top status bar -->
+            <RowDefinition Height="*" MinHeight="160" />   <!-- 1 Main chart + DOM -->
+            <RowDefinition Height="6" />                   <!-- 2 row splitter -->
+            <RowDefinition Height="240" MinHeight="120" /> <!-- 3 CVD / Heatmap / T&S -->
+            <RowDefinition Height="6" />                   <!-- 4 row splitter -->
+            <RowDefinition Height="210" MinHeight="80" />  <!-- 5 Bottom tabs -->
         </Grid.RowDefinitions>
 
-        <!-- Top status bar: Instrument | Contract | Connection | Session | Status -->
+        <!-- Top status bar -->
         <Border Grid.Row="0" Background="{StaticResource PanelBrush}" CornerRadius="6" Padding="10,6">
             <DockPanel LastChildFill="False">
                 <TextBlock Text="Flow Terminal" FontSize="15" FontWeight="SemiBold" Margin="0,0,16,0" />
@@ -25,8 +36,6 @@
                 <TextBlock x:Name="ContractText" Margin="0,0,16,0" />
                 <TextBlock Text="Session:" Foreground="{StaticResource MutedTextBrush}" Margin="0,0,4,0" />
                 <TextBlock x:Name="SessionText" Margin="0,0,16,0" />
-
-                <!-- Honest read-only and simulated-data banners -->
                 <Border DockPanel.Dock="Right" Background="{StaticResource WarningBrush}"
                         CornerRadius="4" Padding="8,2" Margin="8,0,0,0">
                     <TextBlock x:Name="SimulatedBanner" Foreground="#FF15171C" FontWeight="Bold" />
@@ -38,26 +47,33 @@
             </DockPanel>
         </Border>
 
-        <!-- Main area: footprint/heatmap chart (left) + read-only DOM (right) -->
+        <!-- Main area: chart (left) + resizable splitter + read-only DOM (right) -->
         <Grid Grid.Row="1" Margin="0,8,0,0">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="260" />
+                <ColumnDefinition Width="*" MinWidth="200" />
+                <ColumnDefinition Width="6" />
+                <ColumnDefinition Width="260" MinWidth="120" />
             </Grid.ColumnDefinitions>
             <Border Grid.Column="0" Background="{StaticResource PanelBrush}" CornerRadius="6" ClipToBounds="True">
                 <controls:SkiaChartHost x:Name="Chart" />
             </Border>
-            <Border Grid.Column="1" Background="{StaticResource PanelBrush}" CornerRadius="6" Margin="8,0,0,0" ClipToBounds="True">
+            <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" />
+            <Border Grid.Column="2" Background="{StaticResource PanelBrush}" CornerRadius="6" ClipToBounds="True">
                 <controls:DomHost x:Name="Dom" />
             </Border>
         </Grid>
 
-        <!-- CVD (left) + Liquidity Heatmap (center) + Time and Sales (right) -->
-        <Grid Grid.Row="2" Margin="0,8,0,0">
+        <GridSplitter Grid.Row="2" Height="6" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                      ResizeBehavior="PreviousAndNext" ResizeDirection="Rows" />
+
+        <!-- CVD + Liquidity Heatmap + Time and Sales (all resizable) -->
+        <Grid Grid.Row="3">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="280" />
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="320" />
+                <ColumnDefinition Width="280" MinWidth="120" />
+                <ColumnDefinition Width="6" />
+                <ColumnDefinition Width="*" MinWidth="160" />
+                <ColumnDefinition Width="6" />
+                <ColumnDefinition Width="320" MinWidth="140" />
             </Grid.ColumnDefinitions>
             <Border Grid.Column="0" Background="{StaticResource PanelBrush}" CornerRadius="6" Padding="12">
                 <StackPanel VerticalAlignment="Center">
@@ -66,14 +82,16 @@
                     <TextBlock x:Name="BookStateText" Foreground="{StaticResource MutedTextBrush}" Margin="0,6,0,0" />
                 </StackPanel>
             </Border>
-            <Border Grid.Column="1" Background="{StaticResource PanelBrush}" CornerRadius="6" Margin="8,0,0,0" ClipToBounds="True">
+            <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" />
+            <Border Grid.Column="2" Background="{StaticResource PanelBrush}" CornerRadius="6" ClipToBounds="True">
                 <DockPanel>
                     <TextBlock DockPanel.Dock="Top" Text="Liquidity Heatmap (bid green / ask purple)"
                                Foreground="{StaticResource MutedTextBrush}" Margin="8,6,0,4" />
                     <controls:HeatmapHost x:Name="Heatmap" />
                 </DockPanel>
             </Border>
-            <Border Grid.Column="2" Background="{StaticResource PanelBrush}" CornerRadius="6" Margin="8,0,0,0" Padding="8">
+            <GridSplitter Grid.Column="3" Width="6" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" />
+            <Border Grid.Column="4" Background="{StaticResource PanelBrush}" CornerRadius="6" Padding="8">
                 <DockPanel>
                     <TextBlock DockPanel.Dock="Top" Text="Time and Sales (read-only)"
                                Foreground="{StaticResource MutedTextBrush}" Margin="0,0,0,4" />
@@ -82,14 +100,24 @@
             </Border>
         </Grid>
 
-        <!-- Bottom tabs: Replay | Notes | Data | Diagnostics | Performance -->
-        <Border Grid.Row="3" Background="{StaticResource PanelBrush}" CornerRadius="6" Margin="0,8,0,0" Padding="8">
-            <StackPanel Orientation="Horizontal">
-                <TextBlock Text="Replay · Notes · Data · Diagnostics · Performance"
-                           Foreground="{StaticResource MutedTextBrush}" Margin="0,0,16,0" />
-                <TextBlock x:Name="DiagnosticsText" Foreground="{StaticResource MutedTextBrush}" Margin="0,0,16,0" />
-                <TextBlock x:Name="RithmicStatusText" Foreground="{StaticResource MutedTextBrush}" />
-            </StackPanel>
+        <GridSplitter Grid.Row="4" Height="6" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                      ResizeBehavior="PreviousAndNext" ResizeDirection="Rows" />
+
+        <!-- Bottom tabs: Studies | Diagnostics -->
+        <Border Grid.Row="5" Background="{StaticResource PanelBrush}" CornerRadius="6">
+            <TabControl Background="Transparent" BorderThickness="0">
+                <TabItem Header="Studies">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="8">
+                        <StackPanel x:Name="StudiesPanel" />
+                    </ScrollViewer>
+                </TabItem>
+                <TabItem Header="Diagnostics">
+                    <StackPanel Margin="10">
+                        <TextBlock x:Name="DiagnosticsText" Foreground="{StaticResource TextBrush}" FontFamily="Consolas" />
+                        <TextBlock x:Name="RithmicStatusText" Foreground="{StaticResource MutedTextBrush}" Margin="0,8,0,0" />
+                    </StackPanel>
+                </TabItem>
+            </TabControl>
         </Border>
     </Grid>
 </Window>

@@ -1,6 +1,9 @@
 using System.Text;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media;
 using System.Windows.Threading;
+using FlowTerminal.Charting.Studies;
 using FlowTerminal.Domain.Instruments;
 
 namespace FlowTerminal.App;
@@ -30,9 +33,87 @@ public partial class MainWindow : Window
         _renderTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(33) }; // ~30 FPS
         _renderTimer.Tick += OnRenderTick;
 
+        BuildStudiesPanel();
+
         Loaded += OnLoaded;
         Closed += OnClosed;
     }
+
+    /// <summary>
+    /// Populates the Studies tab from <see cref="StudyCatalog"/>, grouped by category.
+    /// Detector-backed studies toggle the live detector engine; others show their
+    /// honest status (Active / Ready / Planned). This is observational analysis only.
+    /// </summary>
+    private void BuildStudiesPanel()
+    {
+        foreach (StudyCategory category in Enum.GetValues<StudyCategory>())
+        {
+            StudiesPanel.Children.Add(new TextBlock
+            {
+                Text = StudyCatalog.CategoryTitle(category),
+                FontWeight = FontWeights.SemiBold,
+                FontSize = 13,
+                Margin = new Thickness(0, 10, 0, 4),
+                Foreground = (Brush)FindResource("TextBrush"),
+            });
+
+            foreach (var study in StudyCatalog.ByCategory(category))
+            {
+                StudiesPanel.Children.Add(BuildStudyRow(study));
+            }
+        }
+    }
+
+    private FrameworkElement BuildStudyRow(StudyDefinition study)
+    {
+        var row = new DockPanel { Margin = new Thickness(4, 2, 4, 2) };
+
+        var toggle = new CheckBox
+        {
+            Content = study.Name,
+            Foreground = (Brush)FindResource("TextBrush"),
+            VerticalAlignment = VerticalAlignment.Center,
+            IsChecked = study.Status != StudyStatus.Planned,
+            IsEnabled = study.Status != StudyStatus.Planned,
+            ToolTip = study.Description,
+        };
+
+        if (study.DetectorKey is { } key)
+        {
+            toggle.Checked += (_, _) => _feed.SetDetectorEnabled(key, true);
+            toggle.Unchecked += (_, _) => _feed.SetDetectorEnabled(key, false);
+        }
+
+        DockPanel.SetDock(toggle, Dock.Left);
+        row.Children.Add(toggle);
+
+        var chip = new Border
+        {
+            CornerRadius = new CornerRadius(4),
+            Padding = new Thickness(6, 1, 6, 1),
+            Margin = new Thickness(8, 0, 0, 0),
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Background = StatusBrush(study.Status),
+            Child = new TextBlock
+            {
+                Text = StudyCatalog.StatusLabel(study.Status),
+                FontSize = 10,
+                FontWeight = FontWeights.Bold,
+                Foreground = new SolidColorBrush(Color.FromRgb(0x0E, 0x0F, 0x12)),
+            },
+        };
+        DockPanel.SetDock(chip, Dock.Right);
+        row.Children.Add(chip);
+
+        return row;
+    }
+
+    private static Brush StatusBrush(StudyStatus status) => status switch
+    {
+        StudyStatus.Active => new SolidColorBrush(Color.FromRgb(0x22, 0xC5, 0x5E)),     // green
+        StudyStatus.EngineReady => new SolidColorBrush(Color.FromRgb(0x22, 0xD3, 0xEE)), // cyan
+        _ => new SolidColorBrush(Color.FromRgb(0x8B, 0x90, 0x9A)),                       // muted
+    };
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {

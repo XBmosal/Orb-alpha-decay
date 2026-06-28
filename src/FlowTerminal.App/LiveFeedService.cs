@@ -139,6 +139,18 @@ public sealed class LiveFeedService : IAsyncDisposable
     /// Called from the UI control's paint; the model keeps history tiled so this does
     /// not rebuild the whole session.
     /// </summary>
+    /// <summary>Enables/disables a detector by its display name (from the Studies panel).</summary>
+    public void SetDetectorEnabled(string detectorName, bool enabled)
+    {
+        foreach (var d in _detectors.Detectors)
+        {
+            if (d.Name == detectorName)
+            {
+                d.Enabled = enabled;
+            }
+        }
+    }
+
     public void RenderHeatmap(SKCanvas canvas, SKRect bounds)
     {
         lock (_lock)
