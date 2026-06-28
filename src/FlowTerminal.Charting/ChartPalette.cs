@@ -24,8 +24,10 @@ public sealed record ChartPalette
     public RgbaColor MutedText { get; init; } = RgbaColor.FromHex("#8B909A");
 
     // ---- Order flow ----
-    public RgbaColor BidLiquidity { get; init; } = RgbaColor.FromHex("#3B82F6");     // muted blue
-    public RgbaColor AskLiquidity { get; init; } = RgbaColor.FromHex("#F59E0B");     // muted orange
+    // Green/purple identity: bid shares the bullish-green family, ask the bearish
+    // light-purple family, so the whole UI reads in two accents. (Configurable.)
+    public RgbaColor BidLiquidity { get; init; } = RgbaColor.FromHex("#34D399");     // emerald green (bid)
+    public RgbaColor AskLiquidity { get; init; } = RgbaColor.FromHex("#C4A7FF");     // light purple (ask)
     public RgbaColor PositiveDelta { get; init; } = RgbaColor.FromHex("#22C55E");    // green
     public RgbaColor NegativeDelta { get; init; } = RgbaColor.FromHex("#C4A7FF");    // light purple
     public RgbaColor NeutralVolume { get; init; } = RgbaColor.FromHex("#6B7280");    // gray
