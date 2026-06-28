@@ -45,15 +45,15 @@ public sealed class LiveFeedService : IAsyncDisposable
     private const int MaxChartBars = 500;
 
     private readonly object _lock = new();
-    private readonly MarketByPriceOrderBook _book = new();
-    private readonly VolumeProfile _profile = new();
-    private readonly CvdCalculator _cvd = new();
-    private readonly TimeAndSalesModel _tape = new();
-    private readonly IBarAggregator _bars = BarAggregator.Time(TimeSpan.FromMinutes(1));
+    private MarketByPriceOrderBook _book = new();
+    private VolumeProfile _profile = new();
+    private CvdCalculator _cvd = new();
+    private TimeAndSalesModel _tape = new();
+    private IBarAggregator _bars = BarAggregator.Time(TimeSpan.FromMinutes(1));
     private readonly List<Bar> _completed = new();
     private readonly List<double> _vwapByBar = new();
-    private readonly MultiVwap _multiVwap = new();
-    private readonly FairValueGapDetector _fvg = new();
+    private MultiVwap _multiVwap = new();
+    private FairValueGapDetector _fvg = new();
     private readonly List<FvgBox> _fvgs = new();
     private readonly TradingCalendar _calendar = new();
     private readonly List<Footprint> _barFootprints = new();
@@ -63,8 +63,14 @@ public sealed class LiveFeedService : IAsyncDisposable
     private int _barsEvicted;
     private long _lastWarmPriceTicks;
     private const int FootprintBars = 20;
-    private const int WarmUpMinutes = 20; // recent synthetic history so the chart is populated on open
-    private readonly LiquidityHeatmap _heatmap = new(TimeSpan.FromMilliseconds(250));
+
+    // Warm-start sizing: aim for ~50 bars of recent synthetic history at the current
+    // timeframe, but cap the replay span so even high timeframes stay responsive.
+    private const int TargetWarmBars = 50;
+    private const int MinWarmMinutes = 20;
+    private const int MaxWarmMinutes = 480; // ~8h cap keeps even high-TF switches ~2s
+
+    private LiquidityHeatmap _heatmap = new(TimeSpan.FromMilliseconds(250));
     private readonly HeatmapRenderer _heatmapRenderer = new();
     private readonly DetectorEngine _detectors = new(RootSymbol.NQ);
     private readonly PipelineDiagnostics _diagnostics = new();
@@ -72,8 +78,56 @@ public sealed class LiveFeedService : IAsyncDisposable
     private InstrumentPipeline? _pipeline;
     private IMarketDataProvider? _provider;
     private CancellationTokenSource? _cts;
+    private Contract? _contract;
+    private TimeSpan _interval = TimeSpan.FromMinutes(1);
+    private int _switching;
 
-    public async Task StartAsync(Contract contract)
+    /// <summary>The bar timeframe the feed is currently aggregating.</summary>
+    public TimeSpan Timeframe => _interval;
+
+    public Task StartAsync(Contract contract)
+    {
+        _contract = contract;
+        return StartFeedAsync();
+    }
+
+    /// <summary>
+    /// Switches the bar timeframe. The current feed is stopped, the per-session
+    /// analytics are reset, history is re-warmed at the new interval and the live
+    /// stream resumes — detector toggles and diagnostics are preserved. This is a
+    /// view/aggregation change only; no orders or trading state are involved.
+    /// </summary>
+    public async Task ChangeTimeframeAsync(TimeSpan interval)
+    {
+        if (interval == _interval || _contract is null)
+        {
+            return;
+        }
+
+        // Ignore overlapping switches (rapid clicks) until the in-flight one settles.
+        if (Interlocked.Exchange(ref _switching, 1) == 1)
+        {
+            return;
+        }
+
+        try
+        {
+            await StopFeedAsync().ConfigureAwait(false);
+            lock (_lock)
+            {
+                _interval = interval;
+                ResetSessionState();
+            }
+
+            await StartFeedAsync().ConfigureAwait(false);
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _switching, 0);
+        }
+    }
+
+    private async Task StartFeedAsync()
     {
         _cts = new CancellationTokenSource();
 
@@ -81,35 +135,85 @@ public sealed class LiveFeedService : IAsyncDisposable
         //    chart, profile, VWAP, footprint and TPO are populated the moment the
         //    window opens, instead of slowly building one live bar at a time.
         const decimal startPrice = 20_000m;
-        await Task.Run(() => WarmUp(contract, startPrice), _cts.Token).ConfigureAwait(false);
+        await Task.Run(() => WarmUp(_contract!, startPrice), _cts.Token).ConfigureAwait(false);
 
         // 2) Go live, continuing from the warmed-up price so there is no seam.
         decimal liveStart = _lastWarmPriceTicks > 0
-            ? PriceConverter.ToPrice(contract.Spec, _lastWarmPriceTicks)
+            ? PriceConverter.ToPrice(_contract!.Spec, _lastWarmPriceTicks)
             : startPrice;
 
         _provider = new MockMarketDataProvider(
-            1, contract, new SyntheticOptions { Seed = 7, StartPrice = liveStart }, realTimePacing: true);
+            1, _contract!, new SyntheticOptions { Seed = 7, StartPrice = liveStart }, realTimePacing: true);
         _pipeline = new InstrumentPipeline(1, ProcessAsync, _diagnostics);
         _pipeline.Start();
 
         await _provider.ConnectAsync(_cts.Token);
-        await _provider.SubscribeAsync(contract, SubscriptionOptions.Default, _cts.Token);
+        await _provider.SubscribeAsync(_contract!, SubscriptionOptions.Default, _cts.Token);
         _ = Task.Run(() => PumpAsync(_cts.Token));
+    }
+
+    private async Task StopFeedAsync()
+    {
+        _cts?.Cancel();
+        if (_provider is not null)
+        {
+            await _provider.DisconnectAsync().ConfigureAwait(false);
+            await _provider.DisposeAsync().ConfigureAwait(false);
+            _provider = null;
+        }
+
+        if (_pipeline is not null)
+        {
+            await _pipeline.DisposeAsync().ConfigureAwait(false);
+            _pipeline = null;
+        }
+
+        _cts?.Dispose();
+        _cts = null;
+    }
+
+    /// <summary>
+    /// Clears the per-session market-data and analytics aggregates so history can be
+    /// rebuilt at a new timeframe. The detector engine and diagnostics are kept so the
+    /// user's study toggles and the running counters survive a timeframe change.
+    /// Must be called under <see cref="_lock"/>.
+    /// </summary>
+    private void ResetSessionState()
+    {
+        _book = new MarketByPriceOrderBook();
+        _profile = new VolumeProfile();
+        _cvd = new CvdCalculator();
+        _tape = new TimeAndSalesModel();
+        _bars = BarAggregator.Time(_interval);
+        _completed.Clear();
+        _vwapByBar.Clear();
+        _multiVwap = new MultiVwap();
+        _fvg = new FairValueGapDetector();
+        _fvgs.Clear();
+        _barFootprints.Clear();
+        _currentFootprint = new Footprint();
+        _tpo = null;
+        _orb = null;
+        _barsEvicted = 0;
+        _lastWarmPriceTicks = 0;
+        _heatmap = new LiquidityHeatmap(TimeSpan.FromMilliseconds(250));
     }
 
     /// <summary>
     /// Synchronously replays a window of synthetic history through the same analytics
-    /// the live feed uses, populating the chart before the live stream begins.
+    /// the live feed uses, populating the chart before the live stream begins. The
+    /// span scales with the timeframe so the chart shows a useful number of bars.
     /// </summary>
     private void WarmUp(Contract contract, decimal startPrice)
     {
         var now = DateTime.UtcNow;
-        var warmStart = now - TimeSpan.FromMinutes(WarmUpMinutes);
+        int warmMinutes = Math.Clamp(
+            (int)(_interval.TotalMinutes * TargetWarmBars), MinWarmMinutes, MaxWarmMinutes);
+        var warmStart = now - TimeSpan.FromMinutes(warmMinutes);
         var gen = new SyntheticSessionGenerator(1, contract, warmStart,
             new SyntheticOptions { Seed = 7, StartPrice = startPrice });
 
-        for (int guard = 0; guard < 4_000_000; guard++)
+        for (int guard = 0; guard < 8_000_000; guard++)
         {
             var e = gen.Next();
             if (e.ExchangeTimestampUtc >= now)
@@ -318,18 +422,6 @@ public sealed class LiveFeedService : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        _cts?.Cancel();
-        if (_provider is not null)
-        {
-            await _provider.DisconnectAsync();
-            await _provider.DisposeAsync();
-        }
-
-        if (_pipeline is not null)
-        {
-            await _pipeline.DisposeAsync();
-        }
-
-        _cts?.Dispose();
+        await StopFeedAsync().ConfigureAwait(false);
     }
 }

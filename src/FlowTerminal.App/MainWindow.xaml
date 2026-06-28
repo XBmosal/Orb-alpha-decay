@@ -14,41 +14,128 @@
             <Setter Property="Opacity" Value="0.5" />
             <Setter Property="ShowsPreview" Value="True" />
         </Style>
+
+        <!-- Flat pill-style toggle used for the timeframe selector and the Indicators
+             button. Highlights on hover and when checked (the active timeframe). -->
+        <Style x:Key="ChipToggleStyle" TargetType="ToggleButton">
+            <Setter Property="Foreground" Value="{StaticResource MutedTextBrush}" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Padding" Value="11,4" />
+            <Setter Property="Margin" Value="1,0" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="bd" Background="{TemplateBinding Background}"
+                                CornerRadius="5" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="{StaticResource GridBrush}" />
+                                <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="{StaticResource GridBrush}" />
+                                <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
 
     <Grid Margin="8">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />               <!-- 0 Top status bar -->
-            <RowDefinition Height="*" MinHeight="160" />   <!-- 1 Main chart + DOM -->
-            <RowDefinition Height="6" />                   <!-- 2 row splitter -->
-            <RowDefinition Height="240" MinHeight="120" /> <!-- 3 CVD / Heatmap / T&S -->
-            <RowDefinition Height="6" />                   <!-- 4 row splitter -->
-            <RowDefinition Height="210" MinHeight="80" />  <!-- 5 Bottom tabs -->
+            <RowDefinition Height="Auto" />               <!-- 0 Toolbar: indicators + title + OHLC + banners -->
+            <RowDefinition Height="Auto" />               <!-- 1 Timeframe bar -->
+            <RowDefinition Height="*" MinHeight="160" />   <!-- 2 Main chart + DOM -->
+            <RowDefinition Height="6" />                   <!-- 3 row splitter -->
+            <RowDefinition Height="240" MinHeight="120" /> <!-- 4 CVD / Heatmap / T&S -->
+            <RowDefinition Height="6" />                   <!-- 5 row splitter -->
+            <RowDefinition Height="180" MinHeight="80" />  <!-- 6 Diagnostics -->
         </Grid.RowDefinitions>
 
-        <!-- Top status bar -->
-        <Border Grid.Row="0" Background="{StaticResource PanelBrush}" CornerRadius="6" Padding="10,6">
+        <!-- ── Toolbar ─────────────────────────────────────────────────────── -->
+        <Border Grid.Row="0" Background="{StaticResource PanelBrush}" CornerRadius="6" Padding="8,5">
             <DockPanel LastChildFill="False">
-                <TextBlock Text="Flow Terminal" FontSize="15" FontWeight="SemiBold" Margin="0,0,16,0" />
-                <TextBlock Text="Instrument:" Foreground="{StaticResource MutedTextBrush}" Margin="0,0,4,0" />
-                <TextBlock x:Name="InstrumentText" Margin="0,0,16,0" />
-                <TextBlock Text="Contract:" Foreground="{StaticResource MutedTextBrush}" Margin="0,0,4,0" />
-                <TextBlock x:Name="ContractText" Margin="0,0,16,0" />
-                <TextBlock Text="Session:" Foreground="{StaticResource MutedTextBrush}" Margin="0,0,4,0" />
-                <TextBlock x:Name="SessionText" Margin="0,0,16,0" />
+
+                <!-- Indicators menu button (top-left) -->
+                <ToggleButton x:Name="IndicatorsButton" DockPanel.Dock="Left"
+                              Style="{StaticResource ChipToggleStyle}" Margin="0,0,12,0" Padding="12,5">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="Indicators" />
+                        <TextBlock Text="  ▾" />
+                    </StackPanel>
+                </ToggleButton>
+
+                <Popup x:Name="IndicatorsPopup" PlacementTarget="{Binding ElementName=IndicatorsButton}"
+                       Placement="Bottom" StaysOpen="False" AllowsTransparency="True"
+                       IsOpen="{Binding IsChecked, ElementName=IndicatorsButton, Mode=TwoWay}">
+                    <Border Background="{StaticResource PanelBrush}" BorderBrush="{StaticResource GridBrush}"
+                            BorderThickness="1" CornerRadius="8" Margin="6" Width="340"
+                            SnapsToDevicePixels="True">
+                        <Border.Effect>
+                            <DropShadowEffect BlurRadius="18" ShadowDepth="2" Opacity="0.5" Color="#000000" />
+                        </Border.Effect>
+                        <DockPanel Margin="6">
+                            <TextBlock DockPanel.Dock="Top" Text="Indicators" FontWeight="SemiBold"
+                                       FontSize="13" Margin="8,6,0,6" />
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="520">
+                                <StackPanel x:Name="IndicatorsPanel" Margin="2,0,2,6" />
+                            </ScrollViewer>
+                        </DockPanel>
+                    </Border>
+                </Popup>
+
+                <!-- Instrument title -->
+                <TextBlock x:Name="InstrumentTitleText" DockPanel.Dock="Left"
+                           VerticalAlignment="Center" FontSize="15" FontWeight="SemiBold"
+                           Margin="0,0,18,0" Text="—" />
+
+                <!-- Live OHLC readout for the latest bar -->
+                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="O" Foreground="{StaticResource MutedTextBrush}" Margin="0,0,3,0" />
+                    <TextBlock x:Name="OpenText" Text="—" Margin="0,0,12,0" />
+                    <TextBlock Text="H" Foreground="{StaticResource MutedTextBrush}" Margin="0,0,3,0" />
+                    <TextBlock x:Name="HighText" Text="—" Foreground="{StaticResource BullishBrush}" Margin="0,0,12,0" />
+                    <TextBlock Text="L" Foreground="{StaticResource MutedTextBrush}" Margin="0,0,3,0" />
+                    <TextBlock x:Name="LowText" Text="—" Foreground="{StaticResource BearishBrush}" Margin="0,0,12,0" />
+                    <TextBlock Text="C" Foreground="{StaticResource MutedTextBrush}" Margin="0,0,3,0" />
+                    <TextBlock x:Name="CloseText" Text="—" Margin="0,0,12,0" />
+                    <TextBlock x:Name="ChangeText" Text="" FontWeight="SemiBold" />
+                </StackPanel>
+
+                <!-- Status banners (right) -->
                 <Border DockPanel.Dock="Right" Background="{StaticResource WarningBrush}"
-                        CornerRadius="4" Padding="8,2" Margin="8,0,0,0">
+                        CornerRadius="4" Padding="8,2" Margin="8,0,0,0" VerticalAlignment="Center">
                     <TextBlock x:Name="SimulatedBanner" Foreground="#FF15171C" FontWeight="Bold" />
                 </Border>
                 <Border DockPanel.Dock="Right" BorderBrush="{StaticResource MutedTextBrush}"
-                        BorderThickness="1" CornerRadius="4" Padding="8,2">
+                        BorderThickness="1" CornerRadius="4" Padding="8,2" VerticalAlignment="Center">
                     <TextBlock x:Name="ReadOnlyBanner" Foreground="{StaticResource MutedTextBrush}" FontWeight="SemiBold" />
                 </Border>
             </DockPanel>
         </Border>
 
+        <!-- ── Timeframe bar ───────────────────────────────────────────────── -->
+        <Border Grid.Row="1" Background="{StaticResource PanelBrush}" CornerRadius="6" Padding="6,3" Margin="0,6,0,0">
+            <DockPanel LastChildFill="False">
+                <TextBlock DockPanel.Dock="Left" Text="Timeframe" Foreground="{StaticResource MutedTextBrush}"
+                           VerticalAlignment="Center" Margin="4,0,10,0" />
+                <StackPanel x:Name="TimeframeBar" DockPanel.Dock="Left" Orientation="Horizontal" />
+
+                <TextBlock DockPanel.Dock="Right" x:Name="ContractText" VerticalAlignment="Center"
+                           Foreground="{StaticResource MutedTextBrush}" Margin="10,0,4,0" />
+                <TextBlock DockPanel.Dock="Right" x:Name="SessionText" VerticalAlignment="Center"
+                           Foreground="{StaticResource MutedTextBrush}" Margin="10,0,0,0" />
+            </DockPanel>
+        </Border>
+
         <!-- Main area: chart (left) + resizable splitter + read-only DOM (right) -->
-        <Grid Grid.Row="1" Margin="0,8,0,0">
+        <Grid Grid.Row="2" Margin="0,8,0,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" MinWidth="200" />
                 <ColumnDefinition Width="6" />
@@ -63,11 +150,11 @@
             </Border>
         </Grid>
 
-        <GridSplitter Grid.Row="2" Height="6" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+        <GridSplitter Grid.Row="3" Height="6" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
                       ResizeBehavior="PreviousAndNext" ResizeDirection="Rows" />
 
         <!-- CVD + Liquidity Heatmap + Time and Sales (all resizable) -->
-        <Grid Grid.Row="3">
+        <Grid Grid.Row="4">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="280" MinWidth="120" />
                 <ColumnDefinition Width="6" />
@@ -100,24 +187,18 @@
             </Border>
         </Grid>
 
-        <GridSplitter Grid.Row="4" Height="6" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+        <GridSplitter Grid.Row="5" Height="6" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
                       ResizeBehavior="PreviousAndNext" ResizeDirection="Rows" />
 
-        <!-- Bottom tabs: Studies | Diagnostics -->
-        <Border Grid.Row="5" Background="{StaticResource PanelBrush}" CornerRadius="6">
-            <TabControl Background="Transparent" BorderThickness="0">
-                <TabItem Header="Studies">
-                    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="8">
-                        <StackPanel x:Name="StudiesPanel" />
-                    </ScrollViewer>
-                </TabItem>
-                <TabItem Header="Diagnostics">
-                    <StackPanel Margin="10">
-                        <TextBlock x:Name="DiagnosticsText" Foreground="{StaticResource TextBrush}" FontFamily="Consolas" />
-                        <TextBlock x:Name="RithmicStatusText" Foreground="{StaticResource MutedTextBrush}" Margin="0,8,0,0" />
-                    </StackPanel>
-                </TabItem>
-            </TabControl>
+        <!-- Diagnostics -->
+        <Border Grid.Row="6" Background="{StaticResource PanelBrush}" CornerRadius="6" Padding="12">
+            <DockPanel>
+                <TextBlock DockPanel.Dock="Top" Text="Diagnostics" Foreground="{StaticResource MutedTextBrush}"
+                           FontWeight="SemiBold" Margin="0,0,0,6" />
+                <TextBlock x:Name="DiagnosticsText" Foreground="{StaticResource TextBrush}" FontFamily="Consolas" />
+                <TextBlock x:Name="RithmicStatusText" Foreground="{StaticResource MutedTextBrush}" Margin="0,8,0,0"
+                           DockPanel.Dock="Bottom" VerticalAlignment="Bottom" />
+            </DockPanel>
         </Border>
     </Grid>
 </Window>

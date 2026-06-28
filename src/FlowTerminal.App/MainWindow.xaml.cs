@@ -1,8 +1,12 @@
+using System.Globalization;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
+using FlowTerminal.Analytics.Bars;
 using FlowTerminal.Charting.Studies;
 using FlowTerminal.Domain.Instruments;
 
@@ -23,6 +27,19 @@ public partial class MainWindow : Window
     private readonly LiveFeedService _feed = new();
     private readonly StudyState _studyState = new();
     private readonly DispatcherTimer _renderTimer;
+    private Contract? _contract;
+    private readonly List<ToggleButton> _timeframeButtons = new();
+
+    /// <summary>The selectable bar timeframes, label → interval. Minutes shown in the title.</summary>
+    private static readonly (string Label, TimeSpan Interval)[] Timeframes =
+    {
+        ("1m", TimeSpan.FromMinutes(1)),
+        ("3m", TimeSpan.FromMinutes(3)),
+        ("5m", TimeSpan.FromMinutes(5)),
+        ("15m", TimeSpan.FromMinutes(15)),
+        ("1h", TimeSpan.FromHours(1)),
+        ("4h", TimeSpan.FromHours(4)),
+    };
 
     public MainWindow(ShellViewModel viewModel)
     {
@@ -35,102 +52,182 @@ public partial class MainWindow : Window
         _renderTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(33) }; // ~30 FPS
         _renderTimer.Tick += OnRenderTick;
 
-        BuildStudiesPanel();
+        BuildTimeframeBar();
+        BuildIndicatorsMenu();
 
         Loaded += OnLoaded;
         Closed += OnClosed;
     }
 
+    // ── Timeframe selector ──────────────────────────────────────────────────
+
+    private void BuildTimeframeBar()
+    {
+        foreach (var (label, interval) in Timeframes)
+        {
+            var btn = new ToggleButton
+            {
+                Content = label,
+                Style = (Style)FindResource("ChipToggleStyle"),
+                Tag = interval,
+                IsChecked = interval == _feed.Timeframe,
+            };
+
+            btn.Click += OnTimeframeClick;
+            _timeframeButtons.Add(btn);
+            TimeframeBar.Children.Add(btn);
+        }
+    }
+
+    private async void OnTimeframeClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not ToggleButton clicked || clicked.Tag is not TimeSpan interval)
+        {
+            return;
+        }
+
+        // Behave like a radio group: the clicked frame stays selected, others clear.
+        foreach (var b in _timeframeButtons)
+        {
+            b.IsChecked = ReferenceEquals(b, clicked);
+        }
+
+        UpdateInstrumentTitle();
+        await _feed.ChangeTimeframeAsync(interval);
+    }
+
+    // ── Indicators menu (replaces the old checkbox list) ────────────────────
+
     /// <summary>
-    /// Populates the Studies tab from <see cref="StudyCatalog"/>, grouped by category.
-    /// Detector-backed studies toggle the live detector engine; others show their
-    /// honest status (Active / Ready / Planned). This is observational analysis only.
+    /// Populates the Indicators popup from <see cref="StudyCatalog"/>, grouped by
+    /// category. Each row is a clickable line that shows a check at the end when the
+    /// indicator is selected and nothing when it is not — no checkboxes. Detector-
+    /// backed indicators also toggle the live detector engine. Observational only.
     /// </summary>
-    private void BuildStudiesPanel()
+    private void BuildIndicatorsMenu()
     {
         foreach (StudyCategory category in Enum.GetValues<StudyCategory>())
         {
-            StudiesPanel.Children.Add(new TextBlock
+            IndicatorsPanel.Children.Add(new TextBlock
             {
                 Text = StudyCatalog.CategoryTitle(category),
                 FontWeight = FontWeights.SemiBold,
-                FontSize = 13,
-                Margin = new Thickness(0, 10, 0, 4),
-                Foreground = (Brush)FindResource("TextBrush"),
+                FontSize = 12,
+                Foreground = (Brush)FindResource("MutedTextBrush"),
+                Margin = new Thickness(8, 10, 0, 4),
             });
 
             foreach (var study in StudyCatalog.ByCategory(category))
             {
-                StudiesPanel.Children.Add(BuildStudyRow(study));
+                IndicatorsPanel.Children.Add(BuildIndicatorRow(study));
             }
         }
     }
 
-    private FrameworkElement BuildStudyRow(StudyDefinition study)
+    private FrameworkElement BuildIndicatorRow(StudyDefinition study)
     {
-        var row = new DockPanel { Margin = new Thickness(4, 2, 4, 2) };
+        bool planned = study.Status == StudyStatus.Planned;
+        bool on = study.DefaultOn && !planned;
 
-        bool on0 = study.DefaultOn && study.Status != StudyStatus.Planned;
-        var toggle = new CheckBox
+        // Seed the shared study state and any backing detector from the initial value.
+        Apply(study, on);
+
+        var check = new TextBlock
         {
-            Content = study.Name,
-            Foreground = (Brush)FindResource("TextBrush"),
+            Text = on ? "✓" : string.Empty,
+            Foreground = (Brush)FindResource("BullishBrush"),
+            FontWeight = FontWeights.Bold,
+            Width = 16,
+            TextAlignment = TextAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
-            IsChecked = on0,
-            IsEnabled = study.Status != StudyStatus.Planned,
+        };
+        DockPanel.SetDock(check, Dock.Right);
+
+        var name = new TextBlock
+        {
+            Text = study.Name,
+            Foreground = (Brush)FindResource(planned ? "MutedTextBrush" : "TextBrush"),
+            VerticalAlignment = VerticalAlignment.Center,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+        };
+
+        var dock = new DockPanel { Margin = new Thickness(2, 1, 2, 1), LastChildFill = true };
+        dock.Children.Add(check);
+
+        // "Planned" indicators are shown but cannot be toggled; tag them faintly.
+        if (planned)
+        {
+            var tag = new TextBlock
+            {
+                Text = "planned",
+                FontSize = 10,
+                Foreground = (Brush)FindResource("MutedTextBrush"),
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(8, 0, 6, 0),
+            };
+            DockPanel.SetDock(tag, Dock.Right);
+            dock.Children.Add(tag);
+        }
+
+        dock.Children.Add(name);
+
+        var row = new Border
+        {
+            Padding = new Thickness(8, 5, 8, 5),
+            CornerRadius = new CornerRadius(5),
+            Background = Brushes.Transparent,
+            Cursor = planned ? Cursors.Arrow : Cursors.Hand,
+            Child = dock,
             ToolTip = study.Description,
         };
 
-        // Chart-overlay studies are keyed by short code; detector-backed studies also
-        // toggle the live detector engine. Seed the initial state from the checkbox.
-        void Apply(bool on)
+        if (!planned)
         {
-            _studyState.Set(study.ShortCode, on);
-            if (study.DetectorKey is { } key) _feed.SetDetectorEnabled(key, on);
-        }
-
-        Apply(on0);
-        toggle.Checked += (_, _) => Apply(true);
-        toggle.Unchecked += (_, _) => Apply(false);
-
-        DockPanel.SetDock(toggle, Dock.Left);
-        row.Children.Add(toggle);
-
-        var chip = new Border
-        {
-            CornerRadius = new CornerRadius(4),
-            Padding = new Thickness(6, 1, 6, 1),
-            Margin = new Thickness(8, 0, 0, 0),
-            HorizontalAlignment = HorizontalAlignment.Right,
-            Background = StatusBrush(study.Status),
-            Child = new TextBlock
+            bool state = on;
+            row.MouseEnter += (_, _) => row.Background = (Brush)FindResource("GridBrush");
+            row.MouseLeave += (_, _) => row.Background = Brushes.Transparent;
+            row.MouseLeftButtonUp += (_, _) =>
             {
-                Text = StudyCatalog.StatusLabel(study.Status),
-                FontSize = 10,
-                FontWeight = FontWeights.Bold,
-                Foreground = new SolidColorBrush(Color.FromRgb(0x0E, 0x0F, 0x12)),
-            },
-        };
-        DockPanel.SetDock(chip, Dock.Right);
-        row.Children.Add(chip);
+                state = !state;
+                check.Text = state ? "✓" : string.Empty;
+                Apply(study, state);
+            };
+        }
 
         return row;
     }
 
-    private static Brush StatusBrush(StudyStatus status) => status switch
+    /// <summary>Applies a study's enabled state to the shared state and any detector.</summary>
+    private void Apply(StudyDefinition study, bool on)
     {
-        StudyStatus.Active => new SolidColorBrush(Color.FromRgb(0x22, 0xC5, 0x5E)),     // green
-        StudyStatus.EngineReady => new SolidColorBrush(Color.FromRgb(0x22, 0xD3, 0xEE)), // cyan
-        _ => new SolidColorBrush(Color.FromRgb(0x8B, 0x90, 0x9A)),                       // muted
-    };
+        _studyState.Set(study.ShortCode, on);
+        if (study.DetectorKey is { } key)
+        {
+            _feed.SetDetectorEnabled(key, on);
+        }
+    }
+
+    // ── Lifecycle / render ──────────────────────────────────────────────────
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
-        var contract = new ContractCalendar().SuggestActive(RootSymbol.NQ, DateOnly.FromDateTime(DateTime.UtcNow));
-        ContractText.Text = contract.FullSymbol;
-        await _feed.StartAsync(contract);
+        _contract = new ContractCalendar().SuggestActive(RootSymbol.NQ, DateOnly.FromDateTime(DateTime.UtcNow));
+        ContractText.Text = _contract.FullSymbol;
+        UpdateInstrumentTitle();
+        await _feed.StartAsync(_contract);
         Heatmap.Attach(_feed);
         _renderTimer.Start();
+    }
+
+    private void UpdateInstrumentTitle()
+    {
+        if (_contract is null)
+        {
+            return;
+        }
+
+        int minutes = (int)_feed.Timeframe.TotalMinutes;
+        InstrumentTitleText.Text = $"{_contract.Spec.Description} Futures  ·  {minutes}m  ·  CME";
     }
 
     private void OnRenderTick(object? sender, EventArgs e)
@@ -141,12 +238,42 @@ public partial class MainWindow : Window
         CvdText.Text = snapshot.Cvd.ToString("N0");
         BookStateText.Text = snapshot.BookValid ? "Book: valid" : $"Book: INVALID ({snapshot.BookInvalidReason})";
         TapeText.Text = FormatTape(snapshot.Tape);
+        UpdateOhlc(snapshot.Bars);
         Heatmap.InvalidateVisual(); // repaint the heatmap from the feed's tiled history
 
         var d = snapshot.Diagnostics;
         string latest = snapshot.Detections.Count > 0 ? $" · last: {snapshot.Detections[0].Label}" : string.Empty;
         DiagnosticsText.Text =
             $"events {d.EventsProcessed:N0} · queue {d.CurrentQueueDepth} · dropped {d.DroppedCanonicalEvents} · gaps {d.SequenceGaps} · signals {snapshot.TotalDetections:N0}{latest}";
+    }
+
+    /// <summary>Updates the header OHLC readout from the latest bar and the session change.</summary>
+    private void UpdateOhlc(IReadOnlyList<Bar> bars)
+    {
+        if (_contract is null || bars.Count == 0)
+        {
+            return;
+        }
+
+        var spec = _contract.Spec;
+        var last = bars[^1];
+        decimal open = PriceConverter.ToPrice(spec, last.OpenTicks);
+        decimal high = PriceConverter.ToPrice(spec, last.HighTicks);
+        decimal low = PriceConverter.ToPrice(spec, last.LowTicks);
+        decimal close = PriceConverter.ToPrice(spec, last.CloseTicks);
+
+        OpenText.Text = open.ToString("N2", CultureInfo.InvariantCulture);
+        HighText.Text = high.ToString("N2", CultureInfo.InvariantCulture);
+        LowText.Text = low.ToString("N2", CultureInfo.InvariantCulture);
+        CloseText.Text = close.ToString("N2", CultureInfo.InvariantCulture);
+
+        // Session change: latest close vs the open of the oldest bar in the buffer.
+        decimal sessionOpen = PriceConverter.ToPrice(spec, bars[0].OpenTicks);
+        decimal change = close - sessionOpen;
+        decimal pct = sessionOpen != 0 ? change / sessionOpen * 100m : 0m;
+        string sign = change >= 0 ? "+" : string.Empty;
+        ChangeText.Text = $"{sign}{change.ToString("N2", CultureInfo.InvariantCulture)} ({sign}{pct.ToString("N2", CultureInfo.InvariantCulture)}%)";
+        ChangeText.Foreground = (Brush)FindResource(change >= 0 ? "BullishBrush" : "BearishBrush");
     }
 
     private static string FormatTape(IReadOnlyList<Charting.Tape.TapeRow> rows)
@@ -171,7 +298,7 @@ public partial class MainWindow : Window
 
     private void ApplyViewModel()
     {
-        InstrumentText.Text = _viewModel.SelectedInstrument;
+        InstrumentTitleText.Text = _viewModel.SelectedInstrument;
         ContractText.Text = "(discovering…)";
         SessionText.Text = _viewModel.SessionLabel;
         SimulatedBanner.Text = _viewModel.SimulatedDataBanner;
