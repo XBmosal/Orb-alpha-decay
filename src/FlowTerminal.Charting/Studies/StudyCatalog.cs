@@ -29,7 +29,8 @@ public sealed record StudyDefinition(
     StudyCategory Category,
     StudyStatus Status,
     string Description,
-    string? DetectorKey = null);
+    string? DetectorKey = null,
+    bool DefaultOn = false);
 
 /// <summary>
 /// The catalog of available studies (à la a "Studies" tab). Each entry honestly
@@ -42,7 +43,7 @@ public static class StudyCatalog
     {
         // ── Volume & Profile ─────────────────────────────────────────────
         new StudyDefinition("Volume Profile (VBP)", "VBP", StudyCategory.VolumeAndProfile, StudyStatus.Active,
-            "Total volume traded at each price over a session; locates high/low volume nodes."),
+            "Total volume traded at each price over a session; locates high/low volume nodes.", DefaultOn: true),
         new StudyDefinition("Bid/Ask Cluster Profile", "BAC", StudyCategory.VolumeAndProfile, StudyStatus.EngineReady,
             "Splits horizontal volume into buying (ask) and selling (bid) segments at each price."),
         new StudyDefinition("Delta Profile", "DP", StudyCategory.VolumeAndProfile, StudyStatus.EngineReady,
@@ -52,7 +53,7 @@ public static class StudyCatalog
         new StudyDefinition("Volume Profile on Swing", "VPS", StudyCategory.VolumeAndProfile, StudyStatus.Planned,
             "Profiles anchored across micro-structural market swings (swing detector pending)."),
         new StudyDefinition("VWAP (daily/weekly/monthly/anchored)", "VWAP", StudyCategory.VolumeAndProfile, StudyStatus.EngineReady,
-            "Volume-weighted average price with std-dev bands; periodic and manually anchored."),
+            "Volume-weighted average price with std-dev bands; periodic and manually anchored.", DefaultOn: true),
 
         // ── Order Flow & Tape ────────────────────────────────────────────
         new StudyDefinition("Footprint / Cluster Chart", "FP", StudyCategory.OrderFlowAndTape, StudyStatus.EngineReady,
@@ -60,15 +61,15 @@ public static class StudyCatalog
         new StudyDefinition("Volume Imbalance Tracker", "IMB", StudyCategory.OrderFlowAndTape, StudyStatus.EngineReady,
             "Stacked diagonal aggressive buy/sell imbalances across the spread."),
         new StudyDefinition("Cumulative Volume Delta (CVD)", "CVD", StudyCategory.OrderFlowAndTape, StudyStatus.Active,
-            "Net continuous accumulation/distribution of aggressive orders; isolates divergence."),
+            "Net continuous accumulation/distribution of aggressive orders; isolates divergence.", DefaultOn: true),
         new StudyDefinition("Large / Block Trade Detector", "LT", StudyCategory.OrderFlowAndTape, StudyStatus.Active,
-            "Flags outsized block/institutional market orders in real time.", DetectorKey: "Large Trade"),
+            "Flags outsized block/institutional market orders in real time.", DetectorKey: "Large Trade", DefaultOn: true),
         new StudyDefinition("Iceberg & Absorption Detector", "ICE", StudyCategory.OrderFlowAndTape, StudyStatus.Active,
-            "Hidden refilling orders (estimated) and heavy passive absorption.", DetectorKey: "Iceberg"),
+            "Hidden refilling orders (estimated) and heavy passive absorption.", DetectorKey: "Iceberg", DefaultOn: true),
         new StudyDefinition("Speed of Tape (SOT)", "SOT", StudyCategory.OrderFlowAndTape, StudyStatus.EngineReady,
             "Transactions/contracts per second; quantifies HFT/algo aggression."),
         new StudyDefinition("Stop Run / Liquidity Hunt", "SR", StudyCategory.OrderFlowAndTape, StudyStatus.Active,
-            "Sweeps through swing levels with volume bursts that run stops.", DetectorKey: "Stop-Run"),
+            "Sweeps through swing levels with volume bursts that run stops.", DetectorKey: "Stop-Run", DefaultOn: true),
 
         // ── Technical Analysis & Price Action ────────────────────────────
         new StudyDefinition("Fair Value Gap (FVG)", "FVG", StudyCategory.TechnicalAndPriceAction, StudyStatus.EngineReady,

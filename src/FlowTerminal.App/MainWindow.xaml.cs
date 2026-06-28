@@ -70,25 +70,26 @@ public partial class MainWindow : Window
     {
         var row = new DockPanel { Margin = new Thickness(4, 2, 4, 2) };
 
+        bool on0 = study.DefaultOn && study.Status != StudyStatus.Planned;
         var toggle = new CheckBox
         {
             Content = study.Name,
             Foreground = (Brush)FindResource("TextBrush"),
             VerticalAlignment = VerticalAlignment.Center,
-            IsChecked = study.Status != StudyStatus.Planned,
+            IsChecked = on0,
             IsEnabled = study.Status != StudyStatus.Planned,
             ToolTip = study.Description,
         };
 
         // Chart-overlay studies are keyed by short code; detector-backed studies also
         // toggle the live detector engine. Seed the initial state from the checkbox.
-        _studyState.Set(study.ShortCode, toggle.IsChecked == true);
         void Apply(bool on)
         {
             _studyState.Set(study.ShortCode, on);
             if (study.DetectorKey is { } key) _feed.SetDetectorEnabled(key, on);
         }
 
+        Apply(on0);
         toggle.Checked += (_, _) => Apply(true);
         toggle.Unchecked += (_, _) => Apply(false);
 

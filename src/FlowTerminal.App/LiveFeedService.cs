@@ -61,7 +61,9 @@ public sealed class LiveFeedService : IAsyncDisposable
     private TpoProfile? _tpo;
     private OpeningRangeBreakout? _orb;
     private int _barsEvicted;
+    private long _lastWarmPriceTicks;
     private const int FootprintBars = 20;
+    private const int WarmUpMinutes = 50; // recent synthetic history so the chart is populated on open
     private readonly LiquidityHeatmap _heatmap = new(TimeSpan.FromMilliseconds(250));
     private readonly HeatmapRenderer _heatmapRenderer = new();
     private readonly DetectorEngine _detectors = new(RootSymbol.NQ);
@@ -74,14 +76,54 @@ public sealed class LiveFeedService : IAsyncDisposable
     public async Task StartAsync(Contract contract)
     {
         _cts = new CancellationTokenSource();
-        // MBP needs depth context; seed a snapshot boundary so the book establishes.
-        _provider = new MockMarketDataProvider(1, contract, new SyntheticOptions { Seed = 7 }, realTimePacing: true);
+
+        // 1) Warm-start with ~recent synthetic history (off the UI thread) so the
+        //    chart, profile, VWAP, footprint and TPO are populated the moment the
+        //    window opens, instead of slowly building one live bar at a time.
+        const decimal startPrice = 20_000m;
+        await Task.Run(() => WarmUp(contract, startPrice), _cts.Token).ConfigureAwait(false);
+
+        // 2) Go live, continuing from the warmed-up price so there is no seam.
+        decimal liveStart = _lastWarmPriceTicks > 0
+            ? PriceConverter.ToPrice(contract.Spec, _lastWarmPriceTicks)
+            : startPrice;
+
+        _provider = new MockMarketDataProvider(
+            1, contract, new SyntheticOptions { Seed = 7, StartPrice = liveStart }, realTimePacing: true);
         _pipeline = new InstrumentPipeline(1, ProcessAsync, _diagnostics);
         _pipeline.Start();
 
         await _provider.ConnectAsync(_cts.Token);
         await _provider.SubscribeAsync(contract, SubscriptionOptions.Default, _cts.Token);
         _ = Task.Run(() => PumpAsync(_cts.Token));
+    }
+
+    /// <summary>
+    /// Synchronously replays a window of synthetic history through the same analytics
+    /// the live feed uses, populating the chart before the live stream begins.
+    /// </summary>
+    private void WarmUp(Contract contract, decimal startPrice)
+    {
+        var now = DateTime.UtcNow;
+        var warmStart = now - TimeSpan.FromMinutes(WarmUpMinutes);
+        var gen = new SyntheticSessionGenerator(1, contract, warmStart,
+            new SyntheticOptions { Seed = 7, StartPrice = startPrice });
+
+        for (int guard = 0; guard < 4_000_000; guard++)
+        {
+            var e = gen.Next();
+            if (e.ExchangeTimestampUtc >= now)
+            {
+                break;
+            }
+
+            // ProcessAsync completes synchronously; call it inline under its own lock.
+            ProcessAsync(e, CancellationToken.None).GetAwaiter().GetResult();
+            if (e.Type == MarketEventType.Trade)
+            {
+                _lastWarmPriceTicks = e.PriceTicks;
+            }
+        }
     }
 
     private async Task PumpAsync(CancellationToken ct)
