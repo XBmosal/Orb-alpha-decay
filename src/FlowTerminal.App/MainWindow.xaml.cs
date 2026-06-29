@@ -30,6 +30,9 @@ public partial class MainWindow : Window
     private readonly List<ToggleButton> _timeframeButtons = new();
     private long _lastEvents;
     private DateTime _lastRateTime = DateTime.UtcNow;
+    private readonly TemplateStore _templateStore = new();
+    private List<ChartTemplate> _templates = new();
+    private readonly Dictionary<string, Action<bool>> _indicatorSetters = new();
 
     // Cached brushes (resolved once) so the per-frame tape rows don't hit FindResource.
     private Brush _buyBrush = Brushes.LimeGreen;
@@ -74,6 +77,11 @@ public partial class MainWindow : Window
         BuildDrawingToolbar();
         BuildIndicatorsMenu();
 
+        _templates = _templateStore.Load();
+        BuildTemplatesMenu();
+        TemplateSaveButton.Click += (_, _) => SaveCurrentTemplate();
+        TemplateNameBox.KeyDown += (_, e) => { if (e.Key == Key.Enter) SaveCurrentTemplate(); };
+
         Loaded += OnLoaded;
         Closed += OnClosed;
     }
@@ -117,15 +125,17 @@ public partial class MainWindow : Window
 
     private async void OnTimeframeClick(object sender, RoutedEventArgs e)
     {
-        if (sender is not ToggleButton clicked || clicked.Tag is not TimeSpan interval)
+        if (sender is ToggleButton { Tag: TimeSpan interval })
         {
-            return;
+            await SelectTimeframeAsync(interval);
         }
+    }
 
-        // Behave like a radio group: the clicked frame stays selected, others clear.
+    private async Task SelectTimeframeAsync(TimeSpan interval)
+    {
         foreach (var b in _timeframeButtons)
         {
-            b.IsChecked = ReferenceEquals(b, clicked);
+            b.IsChecked = b.Tag is TimeSpan t && t == interval;
         }
 
         UpdateInstrumentTitle();
@@ -321,14 +331,17 @@ public partial class MainWindow : Window
 
     private void OnChartTypeClick(object sender, RoutedEventArgs e)
     {
-        if (sender is not ToggleButton clicked || clicked.Tag is not Charting.ChartType type)
+        if (sender is ToggleButton { Tag: Charting.ChartType type })
         {
-            return;
+            SelectChartType(type);
         }
+    }
 
+    private void SelectChartType(Charting.ChartType type)
+    {
         foreach (var b in _chartTypeButtons)
         {
-            b.IsChecked = ReferenceEquals(b, clicked);
+            b.IsChecked = b.Tag is Charting.ChartType t && t == type;
         }
 
         Chart.ChartType = type;
@@ -338,6 +351,7 @@ public partial class MainWindow : Window
 
     private enum CvdView { Number, Line, Candles }
 
+    private CvdView _cvdView = CvdView.Line;
     private readonly List<ToggleButton> _cvdModeButtons = new();
 
     private void BuildCvdModeBar()
@@ -362,13 +376,18 @@ public partial class MainWindow : Window
 
     private void OnCvdModeClick(object sender, RoutedEventArgs e)
     {
-        if (sender is not ToggleButton clicked || clicked.Tag is not CvdView val) return;
-        foreach (var b in _cvdModeButtons) b.IsChecked = ReferenceEquals(b, clicked);
-        ApplyCvdView(val);
+        if (sender is ToggleButton { Tag: CvdView val }) SelectCvdView(val);
+    }
+
+    private void SelectCvdView(CvdView view)
+    {
+        foreach (var b in _cvdModeButtons) b.IsChecked = b.Tag is CvdView v && v == view;
+        ApplyCvdView(view);
     }
 
     private void ApplyCvdView(CvdView view)
     {
+        _cvdView = view;
         CvdNumberView.Visibility = view == CvdView.Number ? Visibility.Visible : Visibility.Collapsed;
         CvdChartView.Visibility = view == CvdView.Number ? Visibility.Collapsed : Visibility.Visible;
         if (view == CvdView.Candles) CvdChart.DisplayMode = Controls.CvdHost.Mode.Candles;
@@ -463,15 +482,16 @@ public partial class MainWindow : Window
 
         if (!planned)
         {
-            bool state = on;
-            row.MouseEnter += (_, _) => row.Background = (Brush)FindResource("GridBrush");
-            row.MouseLeave += (_, _) => row.Background = Brushes.Transparent;
-            row.MouseLeftButtonUp += (_, _) =>
+            void SetState(bool v)
             {
-                state = !state;
-                check.Text = state ? "✓" : string.Empty;
-                Apply(study, state);
-            };
+                check.Text = v ? "✓" : string.Empty;
+                Apply(study, v);
+            }
+
+            row.MouseEnter += (_, _) => row.Background = (Brush)FindResource("SurfaceHoverBrush");
+            row.MouseLeave += (_, _) => row.Background = Brushes.Transparent;
+            row.MouseLeftButtonUp += (_, _) => SetState(check.Text.Length == 0);
+            _indicatorSetters[study.ShortCode] = SetState;
         }
 
         return row;
@@ -485,6 +505,111 @@ public partial class MainWindow : Window
         {
             _feed.SetDetectorEnabled(key, on);
         }
+    }
+
+    // ── Templates (saved chart layouts) ─────────────────────────────────────
+
+    private void BuildTemplatesMenu()
+    {
+        TemplatesListPanel.Children.Clear();
+        if (_templates.Count == 0)
+        {
+            TemplatesListPanel.Children.Add(new TextBlock
+            {
+                Text = "No saved templates yet.",
+                Foreground = _mutedBrush,
+                FontSize = 12,
+                Margin = new Thickness(10, 6, 10, 8),
+            });
+            return;
+        }
+
+        foreach (var t in _templates)
+        {
+            TemplatesListPanel.Children.Add(BuildTemplateRow(t));
+        }
+    }
+
+    private FrameworkElement BuildTemplateRow(ChartTemplate t)
+    {
+        var del = new Button
+        {
+            Content = "✕",
+            Style = (Style)FindResource("IconButtonStyle"),
+            Width = 22,
+            Height = 22,
+            FontSize = 11,
+            Foreground = _mutedBrush,
+            ToolTip = "Delete template",
+        };
+        del.Click += (_, _) =>
+        {
+            _templates.Remove(t);
+            _templateStore.Save(_templates);
+            BuildTemplatesMenu();
+        };
+        DockPanel.SetDock(del, Dock.Right);
+
+        var dock = new DockPanel { LastChildFill = true };
+        dock.Children.Add(del);
+        dock.Children.Add(new StackPanel
+        {
+            VerticalAlignment = VerticalAlignment.Center,
+            Children =
+            {
+                new TextBlock { Text = t.Name, Foreground = _secondaryBrush, FontWeight = FontWeights.SemiBold },
+                new TextBlock
+                {
+                    Text = $"{t.TimeframeMinutes}m · {t.ChartType} · {t.Indicators.Length} indicators",
+                    Foreground = _mutedBrush, FontSize = 10.5,
+                },
+            },
+        });
+
+        var row = new Border
+        {
+            Padding = new Thickness(10, 6, 6, 6),
+            CornerRadius = new CornerRadius(5),
+            Background = Brushes.Transparent,
+            Cursor = Cursors.Hand,
+            Child = dock,
+        };
+        row.MouseEnter += (_, _) => row.Background = (Brush)FindResource("SurfaceHoverBrush");
+        row.MouseLeave += (_, _) => row.Background = Brushes.Transparent;
+        row.MouseLeftButtonUp += async (_, _) =>
+        {
+            TemplatesButton.IsChecked = false;
+            await ApplyTemplateAsync(t);
+        };
+        return row;
+    }
+
+    private void SaveCurrentTemplate()
+    {
+        string name = TemplateNameBox.Text?.Trim() ?? string.Empty;
+        if (name.Length == 0) return;
+
+        _templates.RemoveAll(x => string.Equals(x.Name, name, StringComparison.OrdinalIgnoreCase));
+        _templates.Add(new ChartTemplate(
+            name,
+            (int)_feed.Timeframe.TotalMinutes,
+            Chart.ChartType.ToString(),
+            _cvdView.ToString(),
+            _studyState.Enabled.ToArray()));
+        _templateStore.Save(_templates);
+        TemplateNameBox.Text = string.Empty;
+        BuildTemplatesMenu();
+    }
+
+    private async Task ApplyTemplateAsync(ChartTemplate t)
+    {
+        if (Enum.TryParse<Charting.ChartType>(t.ChartType, out var ct)) SelectChartType(ct);
+        if (Enum.TryParse<CvdView>(t.CvdView, out var cv)) SelectCvdView(cv);
+
+        var enabled = new HashSet<string>(t.Indicators);
+        foreach (var kv in _indicatorSetters) kv.Value(enabled.Contains(kv.Key));
+
+        await SelectTimeframeAsync(TimeSpan.FromMinutes(Math.Max(1, t.TimeframeMinutes)));
     }
 
     // ── Lifecycle / render ──────────────────────────────────────────────────
