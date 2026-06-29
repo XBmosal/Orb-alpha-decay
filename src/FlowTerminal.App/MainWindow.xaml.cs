@@ -308,6 +308,7 @@ public partial class MainWindow : Window
         UpdateInstrumentTitle();
         BuildContractMenu();
         await _feed.ChangeContractAsync(contract);
+        ApplyFootprintPreset(_footprintPreset); // re-apply for the new instrument's thresholds
     }
 
     // ── Workspace tabs (Chart / Heatmap) ────────────────────────────────────
@@ -389,34 +390,27 @@ public partial class MainWindow : Window
         Chart.ChartType = type;
     }
 
-    // ── Footprint cell mode ─────────────────────────────────────────────────
+    // ── Footprint visual presets ────────────────────────────────────────────
 
-    private static readonly (FlowTerminal.Analytics.Footprints.FootprintMode Mode, string Label)[] FootprintModes =
-    {
-        (FlowTerminal.Analytics.Footprints.FootprintMode.BidAsk, "Bid×Ask"),
-        (FlowTerminal.Analytics.Footprints.FootprintMode.Delta, "Delta"),
-        (FlowTerminal.Analytics.Footprints.FootprintMode.TotalVolume, "Volume"),
-        (FlowTerminal.Analytics.Footprints.FootprintMode.BidOnly, "Bid"),
-        (FlowTerminal.Analytics.Footprints.FootprintMode.AskOnly, "Ask"),
-        (FlowTerminal.Analytics.Footprints.FootprintMode.DeltaPercent, "Delta %"),
-        (FlowTerminal.Analytics.Footprints.FootprintMode.TradeCount, "Trades"),
-        (FlowTerminal.Analytics.Footprints.FootprintMode.VolumeProfile, "Profile"),
-    };
+    private string _footprintPreset = FlowTerminal.Analytics.Footprints.FootprintPresetRegistry.Default.Name;
 
-    private void SetFootprintMode(FlowTerminal.Analytics.Footprints.FootprintMode mode)
+    /// <summary>Applies a named footprint preset for the current instrument, preserving the choice.</summary>
+    private void ApplyFootprintPreset(string name)
     {
-        _feed.SetFootprintSettings(_feed.FootprintSettings with { Mode = mode });
-        string label = "Bid×Ask";
-        foreach (var (m, l) in FootprintModes) if (m == mode) label = l;
-        FootprintModeButton.Content = $"FP: {label}";
+        var preset = FlowTerminal.Analytics.Footprints.FootprintPresetRegistry.ByName(name)
+            ?? FlowTerminal.Analytics.Footprints.FootprintPresetRegistry.Default;
+        _footprintPreset = preset.Name;
+        var root = _contract?.Root ?? RootSymbol.NQ;
+        _feed.SetFootprintSettings(preset.ForInstrument(root));
+        FootprintModeButton.Content = $"FP: {preset.Name}";
     }
 
-    private void CycleFootprintMode()
+    private void CycleFootprintPreset()
     {
-        var current = _feed.FootprintSettings.Mode;
+        var presets = FlowTerminal.Analytics.Footprints.FootprintPresetRegistry.BuiltIns;
         int idx = 0;
-        for (int i = 0; i < FootprintModes.Length; i++) if (FootprintModes[i].Mode == current) idx = i;
-        SetFootprintMode(FootprintModes[(idx + 1) % FootprintModes.Length].Mode);
+        for (int i = 0; i < presets.Count; i++) if (presets[i].Name == _footprintPreset) idx = i;
+        ApplyFootprintPreset(presets[(idx + 1) % presets.Count].Name);
     }
 
     // ── CVD display mode ────────────────────────────────────────────────────
@@ -589,7 +583,7 @@ public partial class MainWindow : Window
         UndoButton.Click += (_, _) => Chart.Undo();
         RedoButton.Click += (_, _) => Chart.Redo();
         AddIndicatorButton.Click += (_, _) => IndicatorsButton.IsChecked = true;
-        FootprintModeButton.Click += (_, _) => CycleFootprintMode();
+        FootprintModeButton.Click += (_, _) => CycleFootprintPreset();
 
         RestartButton.Click += async (_, _) => await _feed.RestartAsync();
 
@@ -706,7 +700,7 @@ public partial class MainWindow : Window
             (int)_feed.Timeframe.TotalMinutes,
             Chart.ChartType.ToString(),
             _cvdView.ToString(),
-            _studyState.Enabled.ToArray()) { FootprintMode = _feed.FootprintSettings.Mode.ToString() });
+            _studyState.Enabled.ToArray()) { FootprintMode = _footprintPreset });
         _templateStore.Save(_templates);
         TemplateNameBox.Text = string.Empty;
         BuildTemplatesMenu();
@@ -720,8 +714,8 @@ public partial class MainWindow : Window
         var enabled = new HashSet<string>(t.Indicators);
         foreach (var kv in _indicatorSetters) kv.Value(enabled.Contains(kv.Key));
 
-        if (Enum.TryParse<FlowTerminal.Analytics.Footprints.FootprintMode>(t.FootprintMode, out var fpMode))
-            SetFootprintMode(fpMode);
+        if (FlowTerminal.Analytics.Footprints.FootprintPresetRegistry.ByName(t.FootprintMode) is not null)
+            ApplyFootprintPreset(t.FootprintMode);
 
         await SelectTimeframeAsync(TimeSpan.FromMinutes(Math.Max(1, t.TimeframeMinutes)));
     }
@@ -737,6 +731,7 @@ public partial class MainWindow : Window
         BuildContractMenu();
         _lastRateTime = DateTime.UtcNow;
         await _feed.StartAsync(_contract);
+        ApplyFootprintPreset(_footprintPreset);
         Heatmap.Attach(_feed);
         _renderTimer.Start();
     }

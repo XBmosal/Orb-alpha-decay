@@ -39,6 +39,24 @@ Legend: ✅ done · 🟡 partial / data-limited · ⬜ pending.
   Bounded per-bar state. · UI theme/colours unchanged; green/purple semantics preserved. ·
   No execution controls.
 
+## Customization layer (v0.38)
+
+| Feature | Implemented | Tested | Rendering verified | Notes |
+|---|---|---|---|---|
+| Data mode / visual layout separation | ✅ | ✅ | ✅ | `FootprintMode` × `FootprintVisualLayout` |
+| 12 visual layouts | ✅ | ✅ | ✅ | split/single/histogram/mirrored/profile/gradient/text/outline/marker/ladder/hybrid |
+| Compatibility rules + resolver | ✅ | ✅ | — | invalid pairs snap to default |
+| Cell background sources + normalization | ✅ | ✅ | ✅ | per-bar / visible-range / log / sqrt |
+| Composable render layers + LOD | ✅ | ✅ | ✅ | candle→bg→POC→fill→overlays→text→footer |
+| 12 built-in presets (protected) | ✅ | ✅ | ✅ | distinct renders (test-enforced) |
+| Toolbar preset cycle + persistence | ✅ | — | — | persists in templates |
+| NQ/ES preset overrides | ✅ | ✅ | — | visual kept, thresholds swapped |
+| Visual change ≠ data change | ✅ | ✅ | — | identical bar + hash |
+| Candle style (price/delta colour, body/wick) | ✅ | — | ✅ | |
+| Subdue-ordinary-cells (imbalance/large focus) | ✅ | ✅ | ✅ | |
+| Full settings panel UI | 🟡 | — | — | presets + cycle done; per-field controls pending |
+| Custom user presets persisted | ⬜ | — | — | pending |
+
 ## Known defects (ranked)
 1. *(low)* Per-cell tooltip/crosshair readout not yet wired (chart-level crosshair only).
 2. *(low)* Full footprint settings **panel** UI pending (mode toggle + presets + template

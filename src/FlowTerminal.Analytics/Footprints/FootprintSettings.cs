@@ -1,6 +1,6 @@
 namespace FlowTerminal.Analytics.Footprints;
 
-/// <summary>How each footprint cell is displayed.</summary>
+/// <summary>What data each footprint cell shows (independent of how it is drawn).</summary>
 public enum FootprintMode
 {
     BidAsk,        // "bid × ask"
@@ -11,6 +11,60 @@ public enum FootprintMode
     DeltaPercent,  // delta / total × 100
     TradeCount,
     VolumeProfile, // horizontal volume bars (silhouette)
+}
+
+/// <summary>How a cell is drawn (the visual layout strategy), independent of the data mode.</summary>
+public enum FootprintVisualLayout
+{
+    SplitText,         // bid (left) × ask (right)
+    SingleValue,       // one centred value
+    SplitCell,         // bid/ask background halves + text
+    Histogram,         // horizontal bar by magnitude
+    MirroredHistogram, // negative left / positive right from centre
+    ProfileCandle,     // proportional profile bar per row
+    GradientCell,      // background intensity = magnitude (minimal text)
+    TextOnly,          // text, no fills
+    OutlineCell,       // cell border emphasis
+    Marker,            // condition dots/marks
+    Ladder,            // compact bid | price | ask columns
+    Hybrid,            // profile bar + text
+}
+
+/// <summary>Which metric drives cell-background intensity / profile width (visual only).</summary>
+public enum FootprintBackground
+{
+    None,
+    BidVolume,
+    AskVolume,
+    TotalVolume,
+    Delta,
+    AbsoluteDelta,
+    DeltaPercent,
+    TradeCount,
+}
+
+/// <summary>Normalisation for cell backgrounds and profile bars (stable, flicker-free).</summary>
+public enum FootprintNormalization
+{
+    PerBar,
+    VisibleRange,
+    Logarithmic,
+    SquareRoot,
+}
+
+/// <summary>Candle body colour source.</summary>
+public enum CandleColorMode
+{
+    PriceDirection,
+    DeltaDirection,
+}
+
+/// <summary>Bid/ask text separator.</summary>
+public enum CellSeparator
+{
+    Cross, // ×
+    Pipe,  // |
+    Slash, // /
 }
 
 /// <summary>Which metric the bar Point of Control maximises.</summary>
@@ -64,6 +118,21 @@ public sealed record FootprintSettings
 {
     public FootprintMode Mode { get; init; } = FootprintMode.BidAsk;
 
+    // ── Visual layout (does NOT affect calculation; safe to change without recompute) ──
+    public FootprintVisualLayout VisualLayout { get; init; } = FootprintVisualLayout.SplitText;
+    public FootprintBackground Background { get; init; } = FootprintBackground.None;
+    public FootprintNormalization Normalization { get; init; } = FootprintNormalization.PerBar;
+    public FootprintBackground ProfileSource { get; init; } = FootprintBackground.TotalVolume;
+    public CellSeparator Separator { get; init; } = CellSeparator.Cross;
+    public double CellOpacity { get; init; } = 1.0;
+    public double TextOpacity { get; init; } = 1.0;
+    public bool ShowCandleBody { get; init; } = true;
+    public bool ShowWick { get; init; } = true;
+    public CandleColorMode CandleColor { get; init; } = CandleColorMode.PriceDirection;
+    public bool ShowDeltaFooter { get; init; } = true;
+    public bool HideZeros { get; init; }
+    public bool SubdueOrdinaryCells { get; init; } // imbalance/large-trade focused presets
+
     // Diagonal imbalance.
     public bool EnableDiagonalImbalance { get; init; } = true;
     public bool EnableHorizontalImbalance { get; init; }
@@ -113,6 +182,9 @@ public sealed record FootprintSettings
         UnfinishedMinVolume = Math.Max(0, UnfinishedMinVolume),
         LargeTradeThreshold = Math.Max(1, LargeTradeThreshold),
         LargeTradePercentile = Math.Clamp(LargeTradePercentile, 0.5, 0.9999),
+        CellOpacity = Math.Clamp(CellOpacity, 0.05, 1.0),
+        TextOpacity = Math.Clamp(TextOpacity, 0.1, 1.0),
+        VisualLayout = FootprintCompatibility.Resolve(Mode, VisualLayout),
     };
 
     public static FootprintSettings Default { get; } = new();
