@@ -22,6 +22,7 @@ public sealed class BookmapRenderer
     private const float VolStrip = 48f;
 
     private readonly ChartPalette _palette;
+    private readonly Dictionary<long, long> _merge = new(); // reused per column (no per-frame alloc)
 
     public BookmapRenderer(ChartPalette? palette = null) => _palette = palette ?? ChartPalette.Default;
 
@@ -59,6 +60,9 @@ public sealed class BookmapRenderer
         DateTime t0 = columns[from].TimestampUtc, t1 = columns[^1].TimestampUtc;
 
         // ── Heatmap cells ────────────────────────────────────────────────
+        // Color is by position relative to that column's mid — everything below the
+        // price is green, everything above is purple — regardless of which book side
+        // the (possibly carried-forward) size came from. Per-level size = bid+ask.
         double scaleMax = heatmap.ComputeScaleMax(from, visN, scale);
         var bidBase = _palette.BidLiquidity.ToSkColor();
         var askBase = _palette.AskLiquidity.ToSkColor();
@@ -67,8 +71,19 @@ public sealed class BookmapRenderer
         {
             float x = plot.Left + c * cw;
             var col = columns[from + c];
-            DrawSide(canvas, col.Bid, bidBase, x, cw, ch, minPriceTicks, maxPriceTicks, scaleMax, scale, minSize, Y, cell);
-            DrawSide(canvas, col.Ask, askBase, x, cw, ch, minPriceTicks, maxPriceTicks, scaleMax, scale, minSize, Y, cell);
+            long mid = ColumnMid(col, minPriceTicks, maxPriceTicks);
+
+            _merge.Clear();
+            Accumulate(col.Bid, minPriceTicks, maxPriceTicks);
+            Accumulate(col.Ask, minPriceTicks, maxPriceTicks);
+            foreach (var (price, size) in _merge)
+            {
+                if (size < minSize) continue; // contrast filter
+                double intensity = LiquidityHeatmap.Intensity(size, scaleMax, scale);
+                if (intensity <= 0.012) continue;
+                cell.Color = Heat(price < mid ? bidBase : askBase, intensity);
+                canvas.DrawRect(x, Y(price) - ch, cw + 0.6f, ch + 0.6f, cell);
+            }
         }
 
         DrawRestingWalls(canvas, plot, columns[^1], minPriceTicks, maxPriceTicks, minSize, ch, Y);
@@ -84,19 +99,25 @@ public sealed class BookmapRenderer
         DrawLegend(canvas, plot);
     }
 
-    private void DrawSide(
-        SKCanvas canvas, Dictionary<long, long> levels, SKColor baseColor,
-        float x, float cw, float ch, long minP, long maxP, double scaleMax,
-        HeatmapScale scale, long minSize, Func<long, float> y, SKPaint paint)
+    private void Accumulate(Dictionary<long, long> levels, long minP, long maxP)
     {
         foreach (var (price, size) in levels)
         {
-            if (price < minP || price >= maxP || size < minSize) continue; // contrast filter
-            double intensity = LiquidityHeatmap.Intensity(size, scaleMax, scale);
-            if (intensity <= 0.015) continue;
-            paint.Color = Heat(baseColor, intensity);
-            canvas.DrawRect(x, y(price) - ch, cw + 0.6f, ch + 0.6f, paint);
+            if (price < minP || price >= maxP || size <= 0) continue;
+            _merge[price] = _merge.GetValueOrDefault(price) + size;
         }
+    }
+
+    /// <summary>The price boundary for a column: midpoint of its best bid and best ask.</summary>
+    private static long ColumnMid(HeatmapColumn col, long minP, long maxP)
+    {
+        long bestBid = long.MinValue, bestAsk = long.MaxValue;
+        foreach (var (p, s) in col.Bid) if (s > 0 && p > bestBid) bestBid = p;
+        foreach (var (p, s) in col.Ask) if (s > 0 && p < bestAsk) bestAsk = p;
+        if (bestBid == long.MinValue && bestAsk == long.MaxValue) return (minP + maxP) / 2;
+        if (bestBid == long.MinValue) return bestAsk;
+        if (bestAsk == long.MaxValue) return bestBid;
+        return (bestBid + bestAsk) / 2;
     }
 
     /// <summary>Draws the largest current resting levels as bold horizontal "wall" lines.</summary>
@@ -107,22 +128,25 @@ public sealed class BookmapRenderer
         foreach (var s in latest.Bid.Values) max = Math.Max(max, s);
         foreach (var s in latest.Ask.Values) max = Math.Max(max, s);
         long threshold = Math.Max(minSize, (long)(max * 0.55));
+        long mid = ColumnMid(latest, minP, maxP);
         float h = Math.Max(2f, ch);
 
-        void Walls(Dictionary<long, long> levels, RgbaColor color)
+        void Walls(Dictionary<long, long> levels)
         {
             using var p = new SKPaint { IsAntialias = false };
             foreach (var (price, size) in levels)
             {
                 if (price < minP || price >= maxP || size < threshold) continue;
                 double t = Math.Min(1.0, size / (double)max);
+                // Below the current price → green, above → purple (by position, not book side).
+                var color = price < mid ? _palette.BullishCandle : _palette.BearishCandle;
                 p.Color = color.WithAlpha((byte)(150 + 90 * t)).ToSkColor();
                 canvas.DrawRect(plot.Left, y(price) - h / 2f, plot.Width, h, p);
             }
         }
 
-        Walls(latest.Bid, _palette.BullishCandle);
-        Walls(latest.Ask, _palette.BearishCandle);
+        Walls(latest.Bid);
+        Walls(latest.Ask);
     }
 
     /// <summary>Traces the executed price over time as a thin light line (the bubbles ride it).</summary>
@@ -223,10 +247,13 @@ public sealed class BookmapRenderer
 
     private static SKColor Heat(SKColor c, double intensity)
     {
-        double a = Math.Min(1.0, intensity * 1.15);
-        double w = Math.Max(0.0, (intensity - 0.68) / 0.32) * 0.85;
-        byte Mix(byte ch) => (byte)(ch + (255 - ch) * w);
-        return new SKColor(Mix(c.Red), Mix(c.Green), Mix(c.Blue), (byte)(a * 235));
+        // Strong contrast: small orders stay faint, large orders are opaque and a touch
+        // deeper/richer so they read as the dominant resting liquidity.
+        double i = Math.Clamp(intensity, 0.0, 1.0);
+        double a = Math.Pow(i, 1.6);                       // small → very faint, large → solid
+        double dark = 1.0 - 0.18 * Math.Max(0.0, (i - 0.7) / 0.3); // biggest get slightly darker
+        byte Sc(byte ch) => (byte)(ch * dark);
+        return new SKColor(Sc(c.Red), Sc(c.Green), Sc(c.Blue), (byte)(a * 255));
     }
 
     private static void DrawLevelLine(SKCanvas canvas, SKRect plot, Func<long, float> y, long price, long minP, long maxP, RgbaColor color)
