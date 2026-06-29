@@ -3,26 +3,33 @@
 Legend: ✅ done · 🟡 partial · ⬜ not started · n/a not applicable.
 
 "Rendering" = drawn on the chart/pane. "Settings UI" = per-instance configurable
-controls. "Persistence" = restored from workspace/template. The standard technical
-library below is **calculation-complete and unit-tested**; chart rendering and the
-per-indicator settings UI are the next integration phase.
+controls. "Persistence" = restored from template/workspace. The standard technical
+library below is **calculation-complete, unit-tested, rendered on the chart in the
+existing style, toggleable from the Indicators menu, and persisted through templates**.
+Per-instance settings (editable period/source) ship with documented NQ/ES defaults;
+inline settings controls are the next sub-phase (🟡).
 
-## Standard technical library (`FlowTerminal.Analytics/Indicators`)
+Overlays draw on the candle plot (MA line, Bollinger/Donchian/Keltner envelopes);
+oscillators draw in reserved sub-panes below the candles (up to three at once), using
+only existing palette colours — green/light-purple for directional elements (+DI/−DI,
+MACD histogram), neutral text/grid tones otherwise.
 
-| Indicator | Calc | Tested | Live/Replay parity | Rendering | Settings UI | Persistence | Data | Notes |
+## Standard technical library (`FlowTerminal.Analytics/Indicators` + `Charting/Overlays`)
+
+| Indicator | Code | Calc | Tested | Live/Replay parity | Rendering | Settings | Persistence | Data |
 |---|---|---|---|---|---|---|---|---|
-| Moving Average (SMA/EMA/WMA/RMA/HMA) | ✅ | ✅ | ✅ (deterministic) | ⬜ | ⬜ | ⬜ | OHLC | reference vectors |
-| MACD | ✅ | ✅ | ✅ | ⬜ | ⬜ | ⬜ | OHLC | 12/26/9 |
-| ADX (+DI/−DI) | ✅ | ✅ | ✅ | ⬜ | ⬜ | ⬜ | OHLC | Wilder |
-| ATR | ✅ | ✅ | ✅ | ⬜ | ⬜ | ⬜ | OHLC | ticks |
-| Bollinger Bands | ✅ | ✅ | ✅ | ⬜ | ⬜ | ⬜ | OHLC | population σ |
-| Donchian Channel | ✅ | ✅ | ✅ | ⬜ | ⬜ | ⬜ | OHLC | |
-| Keltner Channel | ✅ | ✅ | ✅ | ⬜ | ⬜ | ⬜ | OHLC | EMA+ATR |
-| RSI | ✅ | ✅ | ✅ | ⬜ | ⬜ | ⬜ | OHLC | Wilder, 0–100 |
-| Stochastic | ✅ | ✅ | ✅ | ⬜ | ⬜ | ⬜ | OHLC | %K/%D |
-| CCI | ✅ | ✅ | ✅ | ⬜ | ⬜ | ⬜ | OHLC | |
-| Rate of Change | ✅ | ✅ | ✅ | ⬜ | ⬜ | ⬜ | OHLC | |
-| Momentum | ✅ | ✅ | ✅ | ⬜ | ⬜ | ⬜ | OHLC | |
+| Moving Average (SMA/EMA/WMA/RMA/HMA) | MA | ✅ | ✅ | ✅ | ✅ overlay | 🟡 defaults | ✅ | OHLC |
+| Bollinger Bands | BB | ✅ | ✅ | ✅ | ✅ overlay | 🟡 | ✅ | OHLC |
+| Donchian Channel | DC | ✅ | ✅ | ✅ | ✅ overlay | 🟡 | ✅ | OHLC |
+| Keltner Channel | KC | ✅ | ✅ | ✅ | ✅ overlay | 🟡 | ✅ | OHLC |
+| RSI | RSI | ✅ | ✅ | ✅ | ✅ pane | 🟡 | ✅ | OHLC |
+| MACD | MACD | ✅ | ✅ | ✅ | ✅ pane | 🟡 | ✅ | OHLC |
+| ADX (+DI/−DI) | ADX | ✅ | ✅ | ✅ | ✅ pane | 🟡 | ✅ | OHLC |
+| ATR | ATR | ✅ | ✅ | ✅ | ✅ pane | 🟡 | ✅ | OHLC |
+| Stochastic | STOCH | ✅ | ✅ | ✅ | ✅ pane | 🟡 | ✅ | OHLC |
+| CCI | CCI | ✅ | ✅ | ✅ | ✅ pane | 🟡 | ✅ | OHLC |
+| Rate of Change | ROC | ✅ | ✅ | ✅ | ✅ pane | 🟡 | ✅ | OHLC |
+| Momentum | MOM | ✅ | ✅ | ✅ | ✅ pane | 🟡 | ✅ | OHLC |
 
 ### Not yet started (standard library)
 SuperTrend, Parabolic SAR, Ichimoku, Linear Regression / Regression Channel, Tillson

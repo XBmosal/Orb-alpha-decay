@@ -11,9 +11,11 @@ Two families exist today:
    wired into the chart overlays. See `docs/DETECTORS.md` for the order-flow detectors.
 2. **Standard technical library** — the price/volume indicators documented below,
    implemented in `FlowTerminal.Analytics/Indicators/` as deterministic, incremental
-   calculators. They are calculation-complete and unit-tested; chart-pane rendering and
-   the per-indicator settings UI are the next integration phase (tracked in
-   `docs/INDICATOR_STATUS.md`).
+   calculators. They are calculation-complete, unit-tested, **rendered on the chart in
+   the existing style** (overlays on the candles; oscillators in reserved sub-panes),
+   **toggled from the Indicators menu**, and **persisted through templates**. Per-instance
+   settings ship with documented NQ/ES defaults; inline settings controls are the next
+   sub-phase (tracked in `docs/INDICATOR_STATUS.md`).
 
 ## Conventions
 

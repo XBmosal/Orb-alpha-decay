@@ -5,6 +5,7 @@ public enum StudyCategory
     VolumeAndProfile,
     OrderFlowAndTape,
     TechnicalAndPriceAction,
+    TechnicalIndicators,
 }
 
 public enum StudyStatus
@@ -86,6 +87,32 @@ public static class StudyCatalog
             "Volume-proxy A/D line assessing institutional pressure."),
         new StudyDefinition("Gap Detector", "GAP", StudyCategory.TechnicalAndPriceAction, StudyStatus.EngineReady,
             "Highlights weekend/overnight opening price gaps."),
+
+        // ── Technical Indicators (standard library; overlays + oscillator panes) ──
+        new StudyDefinition("Moving Average (EMA 20)", "MA", StudyCategory.TechnicalIndicators, StudyStatus.Active,
+            "Exponential moving average of close drawn on the price chart."),
+        new StudyDefinition("Bollinger Bands (20, 2)", "BB", StudyCategory.TechnicalIndicators, StudyStatus.Active,
+            "SMA envelope at ±2 population standard deviations."),
+        new StudyDefinition("Donchian Channel (20)", "DC", StudyCategory.TechnicalIndicators, StudyStatus.Active,
+            "Highest-high / lowest-low breakout channel over 20 bars."),
+        new StudyDefinition("Keltner Channel (20, 10, 2)", "KC", StudyCategory.TechnicalIndicators, StudyStatus.Active,
+            "EMA midline with ATR-scaled bands."),
+        new StudyDefinition("RSI (14)", "RSI", StudyCategory.TechnicalIndicators, StudyStatus.Active,
+            "Wilder's Relative Strength Index in its own pane (0–100)."),
+        new StudyDefinition("MACD (12, 26, 9)", "MACD", StudyCategory.TechnicalIndicators, StudyStatus.Active,
+            "Moving-average convergence/divergence with signal and histogram."),
+        new StudyDefinition("ADX (14)", "ADX", StudyCategory.TechnicalIndicators, StudyStatus.Active,
+            "Wilder's trend-strength index with +DI/−DI (green/purple)."),
+        new StudyDefinition("ATR (14)", "ATR", StudyCategory.TechnicalIndicators, StudyStatus.Active,
+            "Average true range (volatility, in ticks)."),
+        new StudyDefinition("Stochastic (14, 3, 3)", "STOCH", StudyCategory.TechnicalIndicators, StudyStatus.Active,
+            "Close position within the recent range; %K and %D (0–100)."),
+        new StudyDefinition("CCI (20)", "CCI", StudyCategory.TechnicalIndicators, StudyStatus.Active,
+            "Commodity Channel Index oscillator."),
+        new StudyDefinition("Rate of Change (9)", "ROC", StudyCategory.TechnicalIndicators, StudyStatus.Active,
+            "Percentage price change over a fixed lookback."),
+        new StudyDefinition("Momentum (10)", "MOM", StudyCategory.TechnicalIndicators, StudyStatus.Active,
+            "Absolute price change over a fixed lookback."),
     };
 
     public static IEnumerable<StudyDefinition> ByCategory(StudyCategory category) =>
@@ -96,6 +123,7 @@ public static class StudyCatalog
         StudyCategory.VolumeAndProfile => "Volume & Profile",
         StudyCategory.OrderFlowAndTape => "Order Flow & Tape",
         StudyCategory.TechnicalAndPriceAction => "Technical & Price Action",
+        StudyCategory.TechnicalIndicators => "Technical Indicators",
         _ => c.ToString(),
     };
 

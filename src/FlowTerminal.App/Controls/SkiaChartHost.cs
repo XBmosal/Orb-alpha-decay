@@ -37,6 +37,9 @@ public sealed class SkiaChartHost : SKElement
     private readonly VolumeStripRenderer _volumeStrip = new();
     private readonly PriceMarkerRenderer _priceMarker = new();
     private readonly DrawingRenderer _drawingRenderer = new();
+    private readonly IndicatorSeriesEngine _indicatorEngine = new();
+    private readonly IndicatorRenderer _indicatorRenderer = new();
+    private IndicatorRenderData _indicatorData = IndicatorRenderData.Empty;
     private List<ChartDrawing> _drawings = new();
     private readonly Stack<List<ChartDrawing>> _undo = new();
     private readonly Stack<List<ChartDrawing>> _redo = new();
@@ -126,6 +129,11 @@ public sealed class SkiaChartHost : SKElement
     {
         _bars = bars;
         _overlayData = overlays;
+        // Technical indicators are recomputed once per frame from the visible bar list
+        // (a pure function of bars + enabled set), never on the market-data thread.
+        _indicatorData = _studies is { Enabled.Count: > 0 } s
+            ? _indicatorEngine.Compute(bars, s.Enabled)
+            : IndicatorRenderData.Empty;
         InvalidateVisual();
     }
 
@@ -378,10 +386,16 @@ public sealed class SkiaChartHost : SKElement
             (_studies.IsEnabled("VBP") || _studies.IsEnabled("BAC") || _studies.IsEnabled("DP"));
         float profileBand = profileOn ? Math.Min(totalRight * 0.18f, 200f) : 0f;
 
+        // Reserve a strip below the candles for any active oscillator panes (candle
+        // view only). The candle plot shrinks by exactly this amount so panes never
+        // overlap the candles; the time axis stays at the very bottom.
+        float oscReserved = footprint ? 0f
+            : Math.Min(_indicatorRenderer.ReservedPaneHeight(_indicatorData), Math.Max(0f, (h - BottomAxisHeight - TopPadding) * 0.55f));
+
         var viewport = new ChartViewport(
             w, h, min, max, first, visible,
             leftPadding: 0f, rightAxisWidth: RightAxisWidth + profileBand,
-            topPadding: TopPadding, bottomPadding: BottomAxisHeight);
+            topPadding: TopPadding, bottomPadding: BottomAxisHeight + oscReserved);
         _lastBarSlotWidth = viewport.BarSlotWidth;
 
         var plot = new SKRect(viewport.PlotLeft, viewport.PlotTop, totalRight, viewport.PlotBottom);
@@ -405,9 +419,27 @@ public sealed class SkiaChartHost : SKElement
                 _overlays.Render(canvas, viewport, _overlayData, studies.Enabled, profileBand);
                 if (studies.IsEnabled("VOL")) _volumeStrip.Render(canvas, viewport, _bars);
             }
+
+            // Technical-indicator price overlays (MA line, Bollinger/Donchian/Keltner).
+            if (!_indicatorData.IsEmpty)
+            {
+                _indicatorRenderer.RenderOverlays(canvas, viewport, _indicatorData);
+            }
         }
 
         canvas.Restore();
+
+        // Oscillator panes in the reserved strip between the candles and the time axis.
+        if (!footprint && oscReserved > 0 && _indicatorData.Panes.Count > 0)
+        {
+            float paneTop = viewport.PlotBottom;
+            float paneH = oscReserved / _indicatorData.Panes.Count;
+            for (int i = 0; i < _indicatorData.Panes.Count; i++)
+            {
+                var rect = new SKRect(viewport.PlotLeft, paneTop + i * paneH, viewport.PlotRight, paneTop + (i + 1) * paneH);
+                _indicatorRenderer.RenderPane(canvas, viewport, rect, _indicatorData.Panes[i]);
+            }
+        }
 
         DrawPriceAxis(canvas, viewport, totalRight);
         DrawTimeAxis(canvas, viewport, first, visible, footprint);
