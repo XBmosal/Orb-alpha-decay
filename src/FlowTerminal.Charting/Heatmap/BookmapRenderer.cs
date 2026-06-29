@@ -9,14 +9,17 @@ public readonly record struct TradeDot(DateTime Time, long PriceTicks, long Quan
 /// <summary>
 /// Renders a full Bookmap-style liquidity view on one Skia canvas: a time×price
 /// heatmap of resting order-book size (bid green, ask light purple, brightening to a
-/// hot near-white core for the heaviest levels), executed-trade bubbles (green buys /
-/// purple sells, area ∝ size), the live best-bid/ask boundary, a last-trade marker,
-/// price and time axes, and an intensity legend. Observational only.
+/// hot near-white core for the heaviest levels), bold lines for large resting
+/// orders, the traced last-price line, executed-trade bubbles drawn as shaded
+/// spheres (green buys / purple sells, area ∝ aggressive volume), the best-bid/ask
+/// boundary, a last-trade marker, a per-time volume histogram, price/time axes, and
+/// an intensity legend. Observational only.
 /// </summary>
 public sealed class BookmapRenderer
 {
     private const float RightAxis = 64f;
     private const float BottomAxis = 20f;
+    private const float VolStrip = 48f;
 
     private readonly ChartPalette _palette;
 
@@ -32,8 +35,9 @@ public sealed class BookmapRenderer
         canvas.Clear(_palette.Background.ToSkColor());
 
         float plotRight = bounds.Right - RightAxis;
-        float plotBottom = bounds.Bottom - BottomAxis;
-        var plot = new SKRect(bounds.Left, bounds.Top, plotRight, plotBottom);
+        float timeAxisTop = bounds.Bottom - BottomAxis;
+        float volTop = timeAxisTop - VolStrip;
+        var plot = new SKRect(bounds.Left, bounds.Top, plotRight, volTop);
 
         var columns = heatmap.Columns;
         if (columns.Count == 0 || maxPriceTicks <= minPriceTicks)
@@ -44,33 +48,39 @@ public sealed class BookmapRenderer
 
         long span = maxPriceTicks - minPriceTicks;
         float ch = plot.Height / span;
-        float cw = plot.Width / columns.Count;
         float Y(long price) => plot.Bottom - (price - minPriceTicks) * ch;
 
+        // Scroll a recent window into view so columns stay readable and the trade
+        // bubbles (recent history) fill the chart rather than bunching at the edge.
+        int maxCols = Math.Max(60, (int)(plot.Width / 3f));
+        int from = Math.Max(0, columns.Count - maxCols);
+        int visN = columns.Count - from;
+        float cw = plot.Width / visN;
+        DateTime t0 = columns[from].TimestampUtc, t1 = columns[^1].TimestampUtc;
+
         // ── Heatmap cells ────────────────────────────────────────────────
-        double scaleMax = heatmap.ComputeScaleMax(heatmap.BaseIndex, columns.Count, scale);
+        double scaleMax = heatmap.ComputeScaleMax(from, visN, scale);
         var bidBase = _palette.BidLiquidity.ToSkColor();
         var askBase = _palette.AskLiquidity.ToSkColor();
         using var cell = new SKPaint { IsAntialias = false, Style = SKPaintStyle.Fill };
-
-        for (int c = 0; c < columns.Count; c++)
+        for (int c = 0; c < visN; c++)
         {
             float x = plot.Left + c * cw;
-            var col = columns[c];
+            var col = columns[from + c];
             DrawSide(canvas, col.Bid, bidBase, x, cw, ch, minPriceTicks, maxPriceTicks, scaleMax, scale, minSize, Y, cell);
             DrawSide(canvas, col.Ask, askBase, x, cw, ch, minPriceTicks, maxPriceTicks, scaleMax, scale, minSize, Y, cell);
         }
 
-        DrawTradeBubbles(canvas, plot, columns, trades, minPriceTicks, maxPriceTicks, Y);
+        DrawRestingWalls(canvas, plot, columns[^1], minPriceTicks, maxPriceTicks, minSize, ch, Y);
+        DrawPriceTrail(canvas, plot, t0, t1, trades, minPriceTicks, maxPriceTicks, Y);
+        DrawTradeBubblesAndVolume(canvas, plot, volTop, timeAxisTop, t0, t1, trades, minPriceTicks, maxPriceTicks, Y);
 
-        // ── Best bid / ask boundary + last trade ─────────────────────────
         DrawLevelLine(canvas, plot, Y, bestBidTicks, minPriceTicks, maxPriceTicks, _palette.BullishCandle);
         DrawLevelLine(canvas, plot, Y, bestAskTicks, minPriceTicks, maxPriceTicks, _palette.BearishCandle);
 
-        // ── Axes ─────────────────────────────────────────────────────────
         DrawPriceAxis(canvas, plot, plotRight, bounds.Right, minPriceTicks, maxPriceTicks, ch, tickSize,
             lastPriceTicks, lastPriceTicks >= (bestBidTicks + bestAskTicks) / 2);
-        DrawTimeAxis(canvas, plot, columns[0].TimestampUtc, columns[^1].TimestampUtc);
+        DrawTimeAxis(canvas, plot, timeAxisTop, bounds.Bottom, t0, t1);
         DrawLegend(canvas, plot);
     }
 
@@ -89,58 +99,132 @@ public sealed class BookmapRenderer
         }
     }
 
-    /// <summary>
-    /// Aggregates executions into per-time-bucket / per-price bubbles so the radius
-    /// reflects the amount of aggressive buying or selling there. Buy-dominant bubbles
-    /// are green, sell-dominant light purple; area ∝ total aggressive volume.
-    /// </summary>
-    private void DrawTradeBubbles(
-        SKCanvas canvas, SKRect plot, IReadOnlyList<HeatmapColumn> columns, IReadOnlyList<TradeDot> trades,
+    /// <summary>Draws the largest current resting levels as bold horizontal "wall" lines.</summary>
+    private void DrawRestingWalls(
+        SKCanvas canvas, SKRect plot, HeatmapColumn latest, long minP, long maxP, long minSize, float ch, Func<long, float> y)
+    {
+        long max = 1;
+        foreach (var s in latest.Bid.Values) max = Math.Max(max, s);
+        foreach (var s in latest.Ask.Values) max = Math.Max(max, s);
+        long threshold = Math.Max(minSize, (long)(max * 0.55));
+        float h = Math.Max(2f, ch);
+
+        void Walls(Dictionary<long, long> levels, RgbaColor color)
+        {
+            using var p = new SKPaint { IsAntialias = false };
+            foreach (var (price, size) in levels)
+            {
+                if (price < minP || price >= maxP || size < threshold) continue;
+                double t = Math.Min(1.0, size / (double)max);
+                p.Color = color.WithAlpha((byte)(150 + 90 * t)).ToSkColor();
+                canvas.DrawRect(plot.Left, y(price) - h / 2f, plot.Width, h, p);
+            }
+        }
+
+        Walls(latest.Bid, _palette.BullishCandle);
+        Walls(latest.Ask, _palette.BearishCandle);
+    }
+
+    /// <summary>Traces the executed price over time as a thin light line (the bubbles ride it).</summary>
+    private void DrawPriceTrail(
+        SKCanvas canvas, SKRect plot, DateTime t0, DateTime t1, IReadOnlyList<TradeDot> trades,
         long minP, long maxP, Func<long, float> y)
     {
-        if (trades.Count == 0) return;
-
-        DateTime t0 = columns[0].TimestampUtc;
-        DateTime t1 = columns[^1].TimestampUtc;
+        if (trades.Count < 2) return;
         double totalSec = Math.Max(0.001, (t1 - t0).TotalSeconds);
-        int buckets = Math.Max(1, (int)(plot.Width / 6f)); // ~6px-wide time buckets
+        using var path = new SKPath();
+        bool started = false;
+        foreach (var tr in trades)
+        {
+            if (tr.Time < t0) continue;
+            float x = plot.Left + (float)((tr.Time - t0).TotalSeconds / totalSec) * plot.Width;
+            float yy = y(Math.Clamp(tr.PriceTicks, minP, maxP - 1));
+            if (!started) { path.MoveTo(x, yy); started = true; } else path.LineTo(x, yy);
+        }
+
+        if (!started) return;
+        using var line = new SKPaint { Color = _palette.Text.WithAlpha(110).ToSkColor(), Style = SKPaintStyle.Stroke, StrokeWidth = 1f, IsAntialias = true };
+        canvas.DrawPath(path, line);
+    }
+
+    private void DrawTradeBubblesAndVolume(
+        SKCanvas canvas, SKRect plot, float volTop, float volBottom, DateTime t0, DateTime t1,
+        IReadOnlyList<TradeDot> trades, long minP, long maxP, Func<long, float> y)
+    {
+        if (trades.Count == 0) return;
+        double totalSec = Math.Max(0.001, (t1 - t0).TotalSeconds);
+        int buckets = Math.Max(1, (int)(plot.Width / 6f));
         int denom = Math.Max(1, buckets - 1);
 
         var agg = new Dictionary<(int Bucket, long Price), (long Buy, long Sell)>();
+        var vol = new (long Buy, long Sell)[buckets];
         foreach (var tr in trades)
         {
-            if (tr.PriceTicks < minP || tr.PriceTicks >= maxP || tr.Time < t0) continue;
+            if (tr.Time < t0) continue;
             int b = (int)Math.Clamp((tr.Time - t0).TotalSeconds / totalSec * denom, 0, denom);
+            if (tr.IsBuy) vol[b].Buy += tr.Quantity; else vol[b].Sell += tr.Quantity;
+            if (tr.PriceTicks < minP || tr.PriceTicks >= maxP) continue;
             var key = (b, tr.PriceTicks);
             var cur = agg.GetValueOrDefault(key);
             if (tr.IsBuy) cur.Buy += tr.Quantity; else cur.Sell += tr.Quantity;
             agg[key] = cur;
         }
 
-        long maxVol = 1;
-        foreach (var v in agg.Values) maxVol = Math.Max(maxVol, v.Buy + v.Sell);
+        // Volume histogram along the bottom (buy green over sell purple, stacked).
+        long maxVolBar = 1;
+        for (int i = 0; i < buckets; i++) maxVolBar = Math.Max(maxVolBar, vol[i].Buy + vol[i].Sell);
+        float barW = Math.Max(1f, plot.Width / buckets);
+        float stripH = volBottom - volTop;
+        using var vBuy = new SKPaint { Color = _palette.BullishCandle.WithAlpha(200).ToSkColor() };
+        using var vSell = new SKPaint { Color = _palette.BearishCandle.WithAlpha(200).ToSkColor() };
+        for (int i = 0; i < buckets; i++)
+        {
+            long total = vol[i].Buy + vol[i].Sell;
+            if (total <= 0) continue;
+            float x = plot.Left + (float)i / denom * plot.Width - barW / 2f;
+            float hTot = stripH * (total / (float)maxVolBar);
+            float hBuy = hTot * (vol[i].Buy / (float)total);
+            canvas.DrawRect(x, volBottom - hBuy, barW, hBuy, vBuy);
+            canvas.DrawRect(x, volBottom - hTot, barW, hTot - hBuy, vSell);
+        }
 
-        using var buy = new SKPaint { IsAntialias = true };
-        using var sell = new SKPaint { IsAntialias = true };
+        // Aggregated trade bubbles as shaded spheres.
+        long maxBubble = 1;
+        foreach (var v in agg.Values) maxBubble = Math.Max(maxBubble, v.Buy + v.Sell);
         foreach (var (key, v) in agg)
         {
             long total = v.Buy + v.Sell;
             if (total <= 0) continue;
             bool buyDom = v.Buy >= v.Sell;
-            float r = (float)Math.Clamp(2.2 + Math.Sqrt(total / (double)maxVol) * 15.0, 2.2, 17.0);
+            float r = (float)Math.Clamp(2.4 + Math.Sqrt(total / (double)maxBubble) * 16.0, 2.4, 18.0);
             float x = plot.Left + (float)key.Bucket / denom * plot.Width;
-            byte alpha = (byte)(150 + 90.0 * total / maxVol);
-            var paint = buyDom ? buy : sell;
-            paint.Color = (buyDom ? _palette.BullishCandle : _palette.BearishCandle).WithAlpha(alpha).ToSkColor();
-            canvas.DrawCircle(x, y(key.Price), r, paint);
+            DrawSphere(canvas, x, y(key.Price), r, buyDom ? _palette.BullishCandle : _palette.BearishCandle);
         }
     }
 
-    /// <summary>Maps intensity to a heat color: dim at low size, brightening to a near-white core.</summary>
+    private void DrawSphere(SKCanvas canvas, float cx, float cy, float r, RgbaColor baseColor)
+    {
+        var bc = baseColor.ToSkColor();
+        var light = Lerp(bc, new SKColor(255, 255, 255), 0.55);
+        var dark = Lerp(bc, new SKColor(0, 0, 0), 0.45);
+        using var shader = SKShader.CreateRadialGradient(
+            new SKPoint(cx - r * 0.32f, cy - r * 0.32f), r * 1.25f,
+            new[] { light, bc, dark }, new[] { 0f, 0.5f, 1f }, SKShaderTileMode.Clamp);
+        using var paint = new SKPaint { Shader = shader, IsAntialias = true };
+        canvas.DrawCircle(cx, cy, r, paint);
+        using var rim = new SKPaint { Color = dark.WithAlpha(160), Style = SKPaintStyle.Stroke, StrokeWidth = 0.8f, IsAntialias = true };
+        canvas.DrawCircle(cx, cy, r, rim);
+    }
+
+    private static SKColor Lerp(SKColor a, SKColor b, double f) => new(
+        (byte)(a.Red + (b.Red - a.Red) * f),
+        (byte)(a.Green + (b.Green - a.Green) * f),
+        (byte)(a.Blue + (b.Blue - a.Blue) * f));
+
     private static SKColor Heat(SKColor c, double intensity)
     {
         double a = Math.Min(1.0, intensity * 1.15);
-        double w = Math.Max(0.0, (intensity - 0.68) / 0.32) * 0.85; // white-hot blend above ~0.68
+        double w = Math.Max(0.0, (intensity - 0.68) / 0.32) * 0.85;
         byte Mix(byte ch) => (byte)(ch + (255 - ch) * w);
         return new SKColor(Mix(c.Red), Mix(c.Green), Mix(c.Blue), (byte)(a * 235));
     }
@@ -181,11 +265,11 @@ public sealed class BookmapRenderer
         }
     }
 
-    private void DrawTimeAxis(SKCanvas canvas, SKRect plot, DateTime t0, DateTime t1)
+    private void DrawTimeAxis(SKCanvas canvas, SKRect plot, float axisTop, float bottom, DateTime t0, DateTime t1)
     {
         using var grid = new SKPaint { Color = _palette.GridLine.WithAlpha(90).ToSkColor(), Style = SKPaintStyle.Stroke, StrokeWidth = 1 };
         using var text = Text(_palette.MutedText, 10);
-        canvas.DrawLine(plot.Left, plot.Bottom, plot.Right, plot.Bottom, grid);
+        canvas.DrawLine(plot.Left, axisTop, plot.Right, axisTop, grid);
         const int ticks = 6;
         for (int i = 0; i <= ticks; i++)
         {
@@ -193,7 +277,7 @@ public sealed class BookmapRenderer
             var t = t0.AddSeconds((t1 - t0).TotalSeconds * i / ticks).ToLocalTime();
             string s = t.ToString("HH:mm:ss", CultureInfo.InvariantCulture);
             float w = text.MeasureText(s);
-            canvas.DrawText(s, Math.Clamp(x - w / 2f, plot.Left, plot.Right - w), plot.Bottom + 14, text);
+            canvas.DrawText(s, Math.Clamp(x - w / 2f, plot.Left, plot.Right - w), bottom - 6, text);
         }
     }
 
