@@ -574,7 +574,7 @@ public sealed class LiveFeedService : IAsyncDisposable
     }
 
     /// <summary>Renders the full Bookmap-style liquidity view (heatmap + bubbles + axes).</summary>
-    public void RenderBookmap(SKCanvas canvas, SKRect bounds)
+    public void RenderBookmap(SKCanvas canvas, SKRect bounds, BookmapView view)
     {
         lock (_lock)
         {
@@ -584,7 +584,10 @@ public sealed class LiveFeedService : IAsyncDisposable
                 : _lastTradeTicks > 0 ? _lastTradeTicks : 80_000;
             var (lo, hi) = HeatmapWindow(mid);
             decimal tick = _contract?.Spec.TickSize ?? 0.25m;
-            _bookmapRenderer.Render(canvas, bounds, _heatmap, _tradeDots, bid, ask, _lastTradeTicks, lo, hi, tick, _heatmapMinSize);
+            long bidSize = bid != BookSide.NoPrice ? _book.SizeAt(Side.Bid, bid) : 0;
+            long askSize = ask != BookSide.NoPrice ? _book.SizeAt(Side.Ask, ask) : 0;
+            _bookmapRenderer.Render(canvas, bounds, _heatmap, _tradeDots, bid, ask, _lastTradeTicks,
+                lo, hi, tick, _heatmapMinSize, view, bidSize, askSize);
         }
     }
 

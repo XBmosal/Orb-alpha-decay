@@ -7,6 +7,28 @@ namespace FlowTerminal.Charting.Heatmap;
 public readonly record struct TradeDot(DateTime Time, long PriceTicks, long Quantity, bool IsBuy);
 
 /// <summary>
+/// Mutable interaction state for the heatmap: price/time zoom and pan (pan is in
+/// fractions so the host needs no knowledge of the rendered scale) plus the crosshair
+/// cursor in pixels. Defaults mean "auto-follow the live market at 1× zoom".
+/// </summary>
+public sealed class BookmapView
+{
+    public double PriceZoom { get; set; } = 1.0;     // &gt;1 = zoom in (narrower price span)
+    public double PricePanFrac { get; set; }          // shift center, in fractions of the half-span
+    public double TimeZoom { get; set; } = 1.0;       // &gt;1 = fewer columns (zoom in)
+    public double TimePanFrac { get; set; }           // scroll back, in fractions of the visible window
+    public SKPoint? Cursor { get; set; }              // crosshair position in pixels (null = hidden)
+
+    public void Reset()
+    {
+        PriceZoom = 1.0;
+        PricePanFrac = 0;
+        TimeZoom = 1.0;
+        TimePanFrac = 0;
+    }
+}
+
+/// <summary>
 /// Renders a full Bookmap-style liquidity view on one Skia canvas: a time×price
 /// heatmap of resting order-book size (bid green, ask light purple, brightening to a
 /// hot near-white core for the heaviest levels), bold lines for large resting
@@ -30,8 +52,9 @@ public sealed class BookmapRenderer
     public void Render(
         SKCanvas canvas, SKRect bounds, LiquidityHeatmap heatmap, IReadOnlyList<TradeDot> trades,
         long bestBidTicks, long bestAskTicks, long lastPriceTicks,
-        long minPriceTicks, long maxPriceTicks, decimal tickSize,
-        long minSize = 0, HeatmapScale scale = HeatmapScale.Percentile)
+        long autoMinTicks, long autoMaxTicks, decimal tickSize,
+        long minSize = 0, BookmapView? view = null, long bestBidSize = 0, long bestAskSize = 0,
+        HeatmapScale scale = HeatmapScale.Percentile)
     {
         canvas.Clear(_palette.Background.ToSkColor());
 
@@ -41,23 +64,33 @@ public sealed class BookmapRenderer
         var plot = new SKRect(bounds.Left, bounds.Top, plotRight, volTop);
 
         var columns = heatmap.Columns;
-        if (columns.Count == 0 || maxPriceTicks <= minPriceTicks)
+        if (columns.Count == 0 || autoMaxTicks <= autoMinTicks)
         {
             DrawCenteredHint(canvas, plot, "Waiting for depth data…");
             return;
         }
 
+        var v = view ?? new BookmapView();
+
+        // Apply price zoom/pan to the auto-framed window.
+        double halfSpan = Math.Max(1.0, (autoMaxTicks - autoMinTicks) / 2.0) / Math.Clamp(v.PriceZoom, 0.05, 50);
+        double center = (autoMinTicks + autoMaxTicks) / 2.0 + v.PricePanFrac * halfSpan;
+        long minPriceTicks = (long)Math.Floor(center - halfSpan);
+        long maxPriceTicks = (long)Math.Ceiling(center + halfSpan);
+        if (maxPriceTicks <= minPriceTicks) maxPriceTicks = minPriceTicks + 1;
+
         long span = maxPriceTicks - minPriceTicks;
         float ch = plot.Height / span;
         float Y(long price) => plot.Bottom - (price - minPriceTicks) * ch;
 
-        // Scroll a recent window into view so columns stay readable and the trade
-        // bubbles (recent history) fill the chart rather than bunching at the edge.
-        int maxCols = Math.Max(60, (int)(plot.Width / 3f));
-        int from = Math.Max(0, columns.Count - maxCols);
-        int visN = columns.Count - from;
+        // Time zoom/pan: choose a visible column window and scroll it back from the edge.
+        int baseCols = Math.Max(60, (int)(plot.Width / 3f));
+        int minWin = Math.Min(20, columns.Count);
+        int visN = Math.Clamp((int)(baseCols / Math.Clamp(v.TimeZoom, 0.05, 50)), minWin, columns.Count);
+        int panCols = (int)(v.TimePanFrac * visN);
+        int from = Math.Clamp(columns.Count - visN - panCols, 0, Math.Max(0, columns.Count - visN));
         float cw = plot.Width / visN;
-        DateTime t0 = columns[from].TimestampUtc, t1 = columns[^1].TimestampUtc;
+        DateTime t0 = columns[from].TimestampUtc, t1 = columns[from + visN - 1].TimestampUtc;
 
         // ── Heatmap cells ────────────────────────────────────────────────
         // Color is by position relative to that column's mid — everything below the
@@ -97,6 +130,57 @@ public sealed class BookmapRenderer
             lastPriceTicks, lastPriceTicks >= (bestBidTicks + bestAskTicks) / 2);
         DrawTimeAxis(canvas, plot, timeAxisTop, bounds.Bottom, t0, t1);
         DrawLegend(canvas, plot);
+        DrawSizeBox(canvas, plot, plotRight, bounds.Right, Y, bestBidTicks, bestAskTicks, bestBidSize, bestAskSize, minPriceTicks, maxPriceTicks);
+        DrawCrosshair(canvas, plot, v.Cursor, columns, from, visN, cw, ch, minPriceTicks, maxPriceTicks, tickSize, Y);
+    }
+
+    private void DrawSizeBox(
+        SKCanvas canvas, SKRect plot, float axisX, float right, Func<long, float> y,
+        long bid, long ask, long bidSize, long askSize, long minP, long maxP)
+    {
+        void Box(long price, long size, RgbaColor color, bool up)
+        {
+            if (price < minP || price >= maxP || size <= 0) return;
+            float cy = y(price);
+            string s = size.ToString("N0", CultureInfo.InvariantCulture);
+            using var fill = new SKPaint { Color = color.WithAlpha(235).ToSkColor(), IsAntialias = true };
+            using var label = Text(new RgbaColor(0x0A, 0x0C, 0x11, 0xFF), 10f);
+            label.Typeface = SKTypeface.FromFamilyName("Segoe UI", SKFontStyleWeight.SemiBold, SKFontStyleWidth.Normal, SKFontStyleSlant.Upright);
+            float boxY = up ? cy - 21 : cy + 3;
+            canvas.DrawRoundRect(new SKRect(axisX + 2, boxY, right - 2, boxY + 16), 3, 3, fill);
+            canvas.DrawText(s, axisX + 8, boxY + 12, label);
+        }
+
+        Box(ask, askSize, _palette.BearishCandle, up: true);
+        Box(bid, bidSize, _palette.BullishCandle, up: false);
+    }
+
+    private void DrawCrosshair(
+        SKCanvas canvas, SKRect plot, SKPoint? cursor, IReadOnlyList<HeatmapColumn> columns,
+        int from, int visN, float cw, float ch, long minP, long maxP, decimal tickSize, Func<long, float> y)
+    {
+        if (cursor is not { } cur || !plot.Contains(cur)) return;
+
+        using var line = new SKPaint { Color = _palette.Text.WithAlpha(90).ToSkColor(), Style = SKPaintStyle.Stroke, StrokeWidth = 1, PathEffect = SKPathEffect.CreateDash(new[] { 3f, 3f }, 0) };
+        canvas.DrawLine(cur.X, plot.Top, cur.X, plot.Bottom, line);
+        canvas.DrawLine(plot.Left, cur.Y, plot.Right, cur.Y, line);
+
+        // Resolve the cell under the cursor and read its resting size.
+        long price = minP + (long)Math.Round((plot.Bottom - cur.Y) / ch);
+        int ci = Math.Clamp(from + (int)((cur.X - plot.Left) / cw), 0, columns.Count - 1);
+        long size = columns[ci].BidAt(price) + columns[ci].AskAt(price);
+
+        string text = $"{(price * tickSize).ToString("N2", CultureInfo.InvariantCulture)}   ·   {size:N0}";
+        using var bg = new SKPaint { Color = _palette.PanelBackground.WithAlpha(240).ToSkColor(), IsAntialias = true };
+        using var border = new SKPaint { Color = _palette.GridLine.ToSkColor(), Style = SKPaintStyle.Stroke, StrokeWidth = 1, IsAntialias = true };
+        using var label = Text(_palette.Text, 11f);
+        float w = label.MeasureText(text) + 16;
+        float bx = Math.Min(cur.X + 10, plot.Right - w);
+        float by = Math.Max(plot.Top, cur.Y - 26);
+        var box = new SKRect(bx, by, bx + w, by + 19);
+        canvas.DrawRoundRect(box, 4, 4, bg);
+        canvas.DrawRoundRect(box, 4, 4, border);
+        canvas.DrawText(text, bx + 8, by + 13.5f, label);
     }
 
     private void Accumulate(Dictionary<long, long> levels, long minP, long maxP)
