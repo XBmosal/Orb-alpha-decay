@@ -11,16 +11,17 @@ using SkiaSharp.Views.WPF;
 namespace FlowTerminal.App.Controls;
 
 /// <summary>
-/// A single SkiaSharp-backed candlestick chart control with study overlays. The
-/// entire chart is drawn on one canvas — there is NO WPF control per candle. The
-/// latest bar/overlay snapshot is supplied from the (off-thread) feed and the
-/// control repaints on a coalesced timer, so market processing is never tied to the
-/// visual frame rate. Which overlays draw is controlled by the shared StudyState.
+/// A single SkiaSharp-backed chart control that renders either the candle view (with
+/// study overlays) or the footprint/cluster view. The entire chart is drawn on one
+/// canvas — there is NO WPF control per candle. The latest bar/overlay snapshot is
+/// supplied from the (off-thread) feed and the control repaints on a coalesced timer.
 ///
-/// Interaction (all view transforms — no data is modified, no trading controls):
+/// Both views share the same interaction model (all view transforms — no data is
+/// modified, no trading controls):
 ///   • Drag in the plot area      → scroll back/forward through history.
-///   • Drag the right price axis   → zoom price (drag up = taller candles).
-///   • Drag the bottom time axis   → zoom time (drag right = fewer, wider candles).
+///   • Drag the right price axis   → zoom price (drag up = taller candles/cells).
+///   • Drag the bottom time axis   → zoom time (drag right = fewer, wider columns).
+/// The candle and footprint views keep independent pan/zoom so each stays sensible.
 /// </summary>
 public sealed class SkiaChartHost : SKElement
 {
@@ -38,10 +39,16 @@ public sealed class SkiaChartHost : SKElement
     /// <summary>Tick size for axis price labels (NQ/ES = 0.25). Set from the instrument spec.</summary>
     public decimal TickSize { get; set; } = 0.25m;
 
-    // View transform state.
-    private int _visibleBars = 60;    // horizontal zoom (time)
-    private double _priceZoom = 1.0;   // vertical zoom (price); >1 = taller candles
-    private int _panBars;              // bars scrolled back from the live right edge
+    /// <summary>Independent pan/zoom for one view (candles or footprint).</summary>
+    private sealed class ViewState
+    {
+        public int Visible;
+        public int Pan;
+        public double PriceZoom = 1.0;
+    }
+
+    private readonly ViewState _candleView = new() { Visible = 60 };
+    private readonly ViewState _footprintView = new() { Visible = 18 };
 
     private enum DragMode { None, Pan, PriceZoom, TimeZoom }
 
@@ -66,6 +73,13 @@ public sealed class SkiaChartHost : SKElement
         InvalidateVisual();
     }
 
+    private bool FootprintMode =>
+        _studies is not null && _studies.IsEnabled("FP") && _overlayData.Footprint.Count > 0;
+
+    private ViewState View => FootprintMode ? _footprintView : _candleView;
+
+    private int Total => FootprintMode ? _overlayData.Footprint.Count : _bars.Count;
+
     // ── Mouse interaction ───────────────────────────────────────────────────
 
     private DragMode RegionAt(Point p) =>
@@ -78,9 +92,10 @@ public sealed class SkiaChartHost : SKElement
         base.OnMouseLeftButtonDown(e);
         _dragStart = e.GetPosition(this);
         _drag = RegionAt(_dragStart);
-        _dragStartPan = _panBars;
-        _dragStartVisible = _visibleBars;
-        _dragStartZoom = _priceZoom;
+        var view = View;
+        _dragStartPan = view.Pan;
+        _dragStartVisible = view.Visible;
+        _dragStartZoom = view.PriceZoom;
         CaptureMouse();
         e.Handled = true;
     }
@@ -94,32 +109,33 @@ public sealed class SkiaChartHost : SKElement
         }
 
         var pos = e.GetPosition(this);
+        var view = View;
         switch (_drag)
         {
             case DragMode.Pan:
             {
                 double dx = pos.X - _dragStart.X;
                 int barsDelta = (int)Math.Round(dx / Math.Max(1f, _lastBarSlotWidth));
-                int visible = Math.Min(_visibleBars, _bars.Count);
-                int maxPan = Math.Max(0, _bars.Count - visible);
-                _panBars = Math.Clamp(_dragStartPan + barsDelta, 0, maxPan);
+                int visible = Math.Min(view.Visible, Total);
+                int maxPan = Math.Max(0, Total - visible);
+                view.Pan = Math.Clamp(_dragStartPan + barsDelta, 0, maxPan);
                 break;
             }
 
             case DragMode.PriceZoom:
             {
-                // Drag up → zoom in (taller candles); drag down → zoom out.
+                // Drag up → zoom in (taller candles/cells); drag down → zoom out.
                 double dy = _dragStart.Y - pos.Y;
-                _priceZoom = Math.Clamp(_dragStartZoom * Math.Exp(dy * 0.005), 0.2, 12.0);
+                view.PriceZoom = Math.Clamp(_dragStartZoom * Math.Exp(dy * 0.005), 0.2, 12.0);
                 break;
             }
 
             case DragMode.TimeZoom:
             {
-                // Drag right → fewer, wider candles; drag left → more candles.
+                // Drag right → fewer, wider columns; drag left → more.
                 double dx = pos.X - _dragStart.X;
                 int target = (int)Math.Round(_dragStartVisible * Math.Exp(-dx * 0.005));
-                _visibleBars = Math.Clamp(target, 10, 1000);
+                view.Visible = Math.Clamp(target, 5, 1000);
                 break;
             }
         }
@@ -146,48 +162,46 @@ public sealed class SkiaChartHost : SKElement
         float w = e.Info.Width;
         float h = e.Info.Height;
         canvas.Clear(_renderer.Palette.Background.ToSkColor());
-
-        if (_bars.Count == 0 || w <= 0 || h <= 0)
+        if (w <= 0 || h <= 0)
         {
             return;
         }
 
-        // Footprint mode replaces the candle view with its own wide bid×ask columns.
-        if (_studies is not null && _studies.IsEnabled("FP") && _overlayData.Footprint.Count > 0)
+        bool footprint = FootprintMode;
+        var view = footprint ? _footprintView : _candleView;
+        int total = Total;
+        if (total == 0)
         {
-            _footprint.Render(canvas, new SKRect(0, 0, w, h), _overlayData.Footprint, TickSize);
             return;
         }
 
-        int visible = Math.Min(_visibleBars, _bars.Count);
-        int maxPan = Math.Max(0, _bars.Count - visible);
-        if (_panBars > maxPan)
-        {
-            _panBars = maxPan; // history shrank (eviction) — keep the offset in range
-        }
+        int visible = Math.Clamp(Math.Min(view.Visible, total), 1, total);
+        int maxPan = Math.Max(0, total - visible);
+        if (view.Pan > maxPan) view.Pan = maxPan;
+        int first = total - visible - view.Pan;
 
-        int first = _bars.Count - visible - _panBars;
-
-        // Auto-fit the price range to the visible bars, then apply the vertical zoom
-        // about the mid price so dragging the price axis lengthens/shortens candles.
+        // Auto-fit the price range to the visible columns/bars, then apply the vertical
+        // zoom about the mid price.
         long lo = long.MaxValue, hi = long.MinValue;
         for (int i = first; i < first + visible; i++)
         {
-            lo = Math.Min(lo, _bars[i].LowTicks);
-            hi = Math.Max(hi, _bars[i].HighTicks);
+            long low = footprint ? _overlayData.Footprint[i].LowTicks : _bars[i].LowTicks;
+            long high = footprint ? _overlayData.Footprint[i].HighTicks : _bars[i].HighTicks;
+            lo = Math.Min(lo, low);
+            hi = Math.Max(hi, high);
         }
 
         long pad = Math.Max(1, (hi - lo) / 20);
         double center = (lo + hi) / 2.0;
-        double half = ((hi - lo) / 2.0 + pad) / _priceZoom;
+        double half = ((hi - lo) / 2.0 + pad) / view.PriceZoom;
         long min = (long)Math.Floor(center - half);
         long max = (long)Math.Ceiling(center + half);
         if (max <= min) max = min + 1;
 
-        // If a volume profile is enabled, reserve a band on the right so the histogram
-        // sits in its own column and the candles stop before it (no overlap).
+        // Reserve a band on the right for the volume profile (candle view only) so the
+        // histogram never overlaps the candles.
         float totalRight = w - RightAxisWidth;
-        bool profileOn = _studies is not null &&
+        bool profileOn = !footprint && _studies is not null &&
             (_studies.IsEnabled("VBP") || _studies.IsEnabled("BAC") || _studies.IsEnabled("DP"));
         float profileBand = profileOn ? Math.Min(totalRight * 0.18f, 200f) : 0f;
 
@@ -197,23 +211,28 @@ public sealed class SkiaChartHost : SKElement
             topPadding: TopPadding, bottomPadding: BottomAxisHeight);
         _lastBarSlotWidth = viewport.BarSlotWidth;
 
-        // Clip to the candles + profile band so price-zoomed bars do not bleed into the
-        // axis gutters, while still letting the profile draw in its reserved band.
         var plot = new SKRect(viewport.PlotLeft, viewport.PlotTop, totalRight, viewport.PlotBottom);
         canvas.Save();
         canvas.ClipRect(plot);
-        _renderer.Render(canvas, viewport, _bars);
-        if (_studies is { Enabled.Count: > 0 } studies)
+        if (footprint)
         {
-            _overlays.Render(canvas, viewport, _overlayData, studies.Enabled, profileBand);
+            _footprint.Render(canvas, viewport, _overlayData.Footprint, TickSize);
+        }
+        else
+        {
+            _renderer.Render(canvas, viewport, _bars);
+            if (_studies is { Enabled.Count: > 0 } studies)
+            {
+                _overlays.Render(canvas, viewport, _overlayData, studies.Enabled, profileBand);
+            }
         }
 
         canvas.Restore();
 
         DrawPriceAxis(canvas, viewport, totalRight);
-        DrawTimeAxis(canvas, viewport, first, visible);
+        DrawTimeAxis(canvas, viewport, first, visible, footprint);
 
-        if (_panBars > 0)
+        if (view.Pan > 0)
         {
             DrawHistoryBadge(canvas, viewport.PlotRight);
         }
@@ -235,21 +254,21 @@ public sealed class SkiaChartHost : SKElement
         }
     }
 
-    private void DrawTimeAxis(SKCanvas canvas, ChartViewport vp, int first, int visible)
+    private void DrawTimeAxis(SKCanvas canvas, ChartViewport vp, int first, int visible, bool footprint)
     {
         using var grid = new SKPaint { Color = _renderer.Palette.GridLine.WithAlpha(110).ToSkColor(), Style = SKPaintStyle.Stroke, StrokeWidth = 1 };
         using var text = TextPaint(10f);
         float axisTop = vp.PlotBottom;
         canvas.DrawLine(vp.PlotLeft, axisTop, vp.PlotRight, axisTop, grid);
 
-        // Choose a bar step that keeps labels ~80px apart.
         int step = Math.Max(1, (int)Math.Ceiling(visible / Math.Max(1f, vp.PlotWidth / 80f)));
         for (int i = first; i < first + visible; i++)
         {
             if ((i - first) % step != 0) continue;
             float x = vp.BarCenterX(i);
             canvas.DrawLine(x, axisTop, x, axisTop + 4, grid);
-            string label = _bars[i].StartUtc.ToLocalTime().ToString("HH:mm", CultureInfo.InvariantCulture);
+            DateTime t = footprint ? _overlayData.Footprint[i].StartUtc : _bars[i].StartUtc;
+            string label = t.ToLocalTime().ToString("HH:mm", CultureInfo.InvariantCulture);
             float tw = text.MeasureText(label);
             canvas.DrawText(label, x - tw / 2f, axisTop + 16f, text);
         }

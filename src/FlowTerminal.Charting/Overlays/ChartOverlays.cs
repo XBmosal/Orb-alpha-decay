@@ -34,7 +34,8 @@ public readonly record struct FootprintCell(long PriceTicks, long BidVolume, lon
 
 /// <summary>One footprint column: the bar plus its per-price bid/ask cells.</summary>
 public sealed record FootprintColumn(
-    long OpenTicks, long CloseTicks, long HighTicks, long LowTicks, IReadOnlyList<FootprintCell> Cells);
+    long OpenTicks, long CloseTicks, long HighTicks, long LowTicks, IReadOnlyList<FootprintCell> Cells,
+    DateTime StartUtc = default);
 
 /// <summary>One TPO/Market-Profile row: a price and its lettered brackets (e.g. "ABD").</summary>
 public readonly record struct TpoRow(long PriceTicks, string Letters);

@@ -85,6 +85,10 @@ public class ChartOverlayRenderTests
         Assert.True(drew, "expected TPO letters drawn at the left margin");
     }
 
+    private static ChartViewport FootprintViewport(int columns, long minTicks, long maxTicks, int w = 400, int h = 200) =>
+        new(w, h, minTicks, maxTicks, firstBarIndex: 0, visibleBarCount: columns,
+            leftPadding: 0, rightAxisWidth: 64, topPadding: 0, bottomPadding: 0);
+
     [Fact]
     public void Footprint_Renderer_Draws_Cells()
     {
@@ -92,7 +96,8 @@ public class ChartOverlayRenderTests
         var columns = new[] { new FootprintColumn(98, 102, 104, 96, cells) };
         using var bmp = new SKBitmap(400, 200);
         using var canvas = new SKCanvas(bmp);
-        new FootprintRenderer().Render(canvas, new SKRect(0, 0, 400, 200), columns);
+        canvas.Clear(SKColors.Black);
+        new FootprintRenderer().Render(canvas, FootprintViewport(1, 90, 110), columns);
 
         bool nonBlack = false;
         for (int x = 0; x < 400 && !nonBlack; x += 3)
@@ -119,13 +124,13 @@ public class ChartOverlayRenderTests
         }
 
         var columns = new[] { new FootprintColumn(150, 210, 260, 100, cells) };
+        var vp = FootprintViewport(1, 100, 260);
         using var bmp = new SKBitmap(400, 200);
         using var canvas = new SKCanvas(bmp);
         canvas.Clear(SKColors.Black);
-        new FootprintRenderer().Render(canvas, new SKRect(0, 0, 400, 200), columns);
+        new FootprintRenderer().Render(canvas, vp, columns);
 
-        // Center of the single wide column (plot width = 400 - 64 gutter).
-        int cx = (int)((400 - 64) / 2f);
+        int cx = (int)vp.BarCenterX(0);
         bool greenRight = false, purpleLeft = false;
         for (int yy = 20; yy < 180; yy++)
         {
@@ -151,7 +156,8 @@ public class ChartOverlayRenderTests
     {
         using var bmp = new SKBitmap(400, 200);
         using var canvas = new SKCanvas(bmp);
-        new FootprintRenderer().Render(canvas, new SKRect(0, 0, 400, 200), Array.Empty<FootprintColumn>());
+        canvas.Clear(SKColors.Black);
+        new FootprintRenderer().Render(canvas, FootprintViewport(1, 90, 110), Array.Empty<FootprintColumn>());
 
         bool nonBlack = false;
         for (int x = 0; x < 400 && !nonBlack; x += 2)

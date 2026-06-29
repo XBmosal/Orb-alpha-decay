@@ -57,12 +57,12 @@ public sealed class LiveFeedService : IAsyncDisposable
     private readonly List<FvgBox> _fvgs = new();
     private readonly TradingCalendar _calendar = new();
     private readonly List<Footprint> _barFootprints = new();
+    private readonly List<FootprintColumn> _footprintColumns = new(); // 1:1 with _completed
     private Footprint _currentFootprint = new();
     private TpoProfile? _tpo;
     private OpeningRangeBreakout? _orb;
     private int _barsEvicted;
     private long _lastWarmPriceTicks;
-    private const int FootprintBars = 12; // few, wide columns so the cluster is legible
 
     // Warm-start sizing: aim for ~50 bars of recent synthetic history at the current
     // timeframe, but cap the replay span so even high timeframes stay responsive.
@@ -191,6 +191,7 @@ public sealed class LiveFeedService : IAsyncDisposable
         _fvg = new FairValueGapDetector();
         _fvgs.Clear();
         _barFootprints.Clear();
+        _footprintColumns.Clear();
         _currentFootprint = new Footprint();
         _tpo = null;
         _orb = null;
@@ -256,6 +257,20 @@ public sealed class LiveFeedService : IAsyncDisposable
         return ValueTask.CompletedTask;
     }
 
+    /// <summary>Projects a completed bar and its footprint into a render-ready column.</summary>
+    private static FootprintColumn BuildFootprintColumn(Bar bar, Footprint fp)
+    {
+        var cells = new List<FootprintCell>();
+        foreach (var lvl in fp.Levels())
+        {
+            // BidVolume = traded at bid (sells), AskVolume = traded at ask (buys).
+            cells.Add(new FootprintCell(lvl.PriceTicks, lvl.SellVolume, lvl.BuyVolume));
+        }
+
+        return new FootprintColumn(
+            bar.OpenTicks, bar.CloseTicks, bar.HighTicks, bar.LowTicks, cells, bar.StartUtc);
+    }
+
     /// <summary>
     /// Processes one canonical event into the analytics. When <paramref name="warmUp"/>
     /// is true the heavy, history-replay-only-irrelevant work (the liquidity heatmap's
@@ -297,7 +312,9 @@ public sealed class LiveFeedService : IAsyncDisposable
                     if (!warmUp) _detectors.OnBar(completed);
                     _completed.Add(completed);
                     _vwapByBar.Add(_multiVwap.Daily.VwapTicks);
-                    _barFootprints.Add(_currentFootprint);
+                    var doneFootprint = _currentFootprint;
+                    _barFootprints.Add(doneFootprint);
+                    _footprintColumns.Add(BuildFootprintColumn(completed, doneFootprint));
                     _currentFootprint = new Footprint();
 
                     int absoluteIndex = _barsEvicted + _completed.Count - 1;
@@ -313,6 +330,7 @@ public sealed class LiveFeedService : IAsyncDisposable
                         _completed.RemoveRange(0, remove);
                         _vwapByBar.RemoveRange(0, remove);
                         _barFootprints.RemoveRange(0, remove);
+                        _footprintColumns.RemoveRange(0, remove);
                         _barsEvicted += remove;
                     }
                 }
@@ -348,20 +366,14 @@ public sealed class LiveFeedService : IAsyncDisposable
                 }
             }
 
-            // Footprint columns for the most recent bars (for the footprint view).
-            var footprint = new List<FootprintColumn>();
-            int fpStart = Math.Max(0, _completed.Count - FootprintBars);
-            for (int i = fpStart; i < _completed.Count; i++)
+            // Footprint columns for the whole buffer (aligned 1:1 with completed bars),
+            // plus the developing bar, so the footprint view can pan/zoom like candles.
+            // The completed columns are built once on bar close, so this is a cheap copy.
+            var footprint = new List<FootprintColumn>(_footprintColumns.Count + 1);
+            footprint.AddRange(_footprintColumns);
+            if (_bars.HasDeveloping)
             {
-                var bar = _completed[i];
-                var fp = _barFootprints[i];
-                var cells = new List<FootprintCell>();
-                foreach (var lvl in fp.Levels())
-                {
-                    cells.Add(new FootprintCell(lvl.PriceTicks, lvl.SellVolume, lvl.BuyVolume));
-                }
-
-                footprint.Add(new FootprintColumn(bar.OpenTicks, bar.CloseTicks, bar.HighTicks, bar.LowTicks, cells));
+                footprint.Add(BuildFootprintColumn(_bars.Developing, _currentFootprint));
             }
 
             // TPO rows (lettered brackets per price) over the session.
