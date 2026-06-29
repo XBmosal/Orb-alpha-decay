@@ -524,8 +524,9 @@ public sealed class SkiaChartHost : SKElement
 
     private void DrawHistoryBadge(SKCanvas canvas, float plotRight)
     {
-        using var bg = new SKPaint { Color = new SKColor(0x0E, 0x0F, 0x12, 0xCC), IsAntialias = true };
-        using var fg = new SKPaint { Color = new SKColor(0xC4, 0xA7, 0xFF), IsAntialias = true, TextSize = 12 };
+        var pal = _renderer.Palette;
+        using var bg = new SKPaint { Color = pal.Background.WithAlpha(0xCC).ToSkColor(), IsAntialias = true };
+        using var fg = new SKPaint { Color = pal.BearishCandle.ToSkColor(), IsAntialias = true, TextSize = 12 };
         const string text = "◂ history — drag right edge to resume live";
         float tw = fg.MeasureText(text);
         var rect = new SKRect(plotRight - tw - 24, 8, plotRight - 8, 28);

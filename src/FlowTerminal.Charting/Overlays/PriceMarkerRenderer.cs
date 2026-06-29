@@ -35,7 +35,7 @@ public sealed class PriceMarkerRenderer
         string text = (priceTicks * tickSize).ToString("N2", CultureInfo.InvariantCulture);
         using var label = new SKPaint
         {
-            Color = new SKColor(0x0A, 0x0C, 0x11),
+            Color = _palette.Background.ToSkColor(), // dark text on the coloured price pill
             IsAntialias = true,
             TextSize = 11f,
             Typeface = SKTypeface.FromFamilyName("Segoe UI", SKFontStyleWeight.SemiBold, SKFontStyleWidth.Normal, SKFontStyleSlant.Upright),

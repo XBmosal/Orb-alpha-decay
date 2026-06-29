@@ -35,14 +35,23 @@ public partial class MainWindow : Window
     private readonly Dictionary<string, Action<bool>> _indicatorSetters = new();
 
     // Cached brushes (resolved once) so the per-frame tape rows don't hit FindResource.
-    private Brush _buyBrush = Brushes.LimeGreen;
-    private Brush _sellBrush = Brushes.MediumPurple;
-    private Brush _neutralBrush = Brushes.Gray;
+    // The initialisers are on-identity fallbacks (used only if a theme lookup fails):
+    // bullish green / bearish light purple / amber warning, matching Themes/Colors.xaml.
+    private static SolidColorBrush Identity(byte r, byte g, byte b)
+    {
+        var brush = new SolidColorBrush(System.Windows.Media.Color.FromRgb(r, g, b));
+        brush.Freeze();
+        return brush;
+    }
+
+    private Brush _buyBrush = Identity(0x22, 0xC5, 0x5E);   // green
+    private Brush _sellBrush = Identity(0xC4, 0xA7, 0xFF);  // light purple
+    private Brush _neutralBrush = Identity(0x70, 0x79, 0x89);
     private Brush _buySoftBrush = Brushes.Transparent;
     private Brush _sellSoftBrush = Brushes.Transparent;
-    private Brush _warningBrush = Brushes.Orange;
-    private Brush _secondaryBrush = Brushes.Gray;
-    private Brush _mutedBrush = Brushes.Gray;
+    private Brush _warningBrush = Identity(0xF5, 0xB9, 0x42); // amber
+    private Brush _secondaryBrush = Identity(0xA8, 0xB0, 0xBF);
+    private Brush _mutedBrush = Identity(0x70, 0x79, 0x89);
     private Brush _pocSoftBrush = Brushes.Transparent;
     private Brush _bestRowBrush = Brushes.Transparent;
 

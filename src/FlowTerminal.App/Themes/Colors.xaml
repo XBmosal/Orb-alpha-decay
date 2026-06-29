@@ -28,10 +28,13 @@
     <Color x:Key="TextMutedColor">#FF707989</Color>
 
     <!-- ── Market identity ───────────────────────────────────────────────── -->
+    <!-- Green/purple is mandatory and consistent across the whole product: bid
+         liquidity shares the bullish-green family, ask the bearish light-purple
+         family (matching the SkiaSharp ChartPalette). Bid/ask are never blue/amber. -->
     <Color x:Key="BullishColor">#FF22C55E</Color>   <!-- green -->
     <Color x:Key="BearishColor">#FFC4A7FF</Color>   <!-- light purple -->
-    <Color x:Key="BidColor">#FF4D9EFF</Color>       <!-- blue -->
-    <Color x:Key="AskColor">#FFF59E5B</Color>       <!-- amber -->
+    <Color x:Key="BidColor">#FF34D399</Color>       <!-- emerald green (bid liquidity) -->
+    <Color x:Key="AskColor">#FFC4A7FF</Color>       <!-- light purple (ask liquidity) -->
 
     <!-- ── Status / accent ───────────────────────────────────────────────── -->
     <Color x:Key="InfoColor">#FF4FD1C5</Color>      <!-- cyan -->
