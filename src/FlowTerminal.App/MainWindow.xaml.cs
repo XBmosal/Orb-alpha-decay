@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -30,6 +29,15 @@ public partial class MainWindow : Window
     private Contract? _contract;
     private readonly List<ToggleButton> _timeframeButtons = new();
 
+    // Cached brushes (resolved once) so the per-frame tape rows don't hit FindResource.
+    private Brush _buyBrush = Brushes.LimeGreen;
+    private Brush _sellBrush = Brushes.MediumPurple;
+    private Brush _neutralBrush = Brushes.Gray;
+    private Brush _buySoftBrush = Brushes.Transparent;
+    private Brush _sellSoftBrush = Brushes.Transparent;
+    private Brush _warningBrush = Brushes.Orange;
+    private Brush _secondaryBrush = Brushes.Gray;
+
     /// <summary>The selectable bar timeframes, label → interval. Minutes shown in the title.</summary>
     private static readonly (string Label, TimeSpan Interval)[] Timeframes =
     {
@@ -52,11 +60,26 @@ public partial class MainWindow : Window
         _renderTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(33) }; // ~30 FPS
         _renderTimer.Tick += OnRenderTick;
 
+        CacheBrushes();
         BuildTimeframeBar();
         BuildIndicatorsMenu();
 
         Loaded += OnLoaded;
         Closed += OnClosed;
+    }
+
+    private Brush Brush(string key, Brush fallback) =>
+        TryFindResource(key) as Brush ?? fallback;
+
+    private void CacheBrushes()
+    {
+        _buyBrush = Brush("BullishBrush", _buyBrush);
+        _sellBrush = Brush("BearishBrush", _sellBrush);
+        _neutralBrush = Brush("TextMutedBrush", _neutralBrush);
+        _buySoftBrush = Brush("BullishSoftBrush", _buySoftBrush);
+        _sellSoftBrush = Brush("BearishSoftBrush", _sellSoftBrush);
+        _warningBrush = Brush("WarningBrush", _warningBrush);
+        _secondaryBrush = Brush("TextSecondaryBrush", _secondaryBrush);
     }
 
     // ── Timeframe selector ──────────────────────────────────────────────────
@@ -68,7 +91,7 @@ public partial class MainWindow : Window
             var btn = new ToggleButton
             {
                 Content = label,
-                Style = (Style)FindResource("ChipToggleStyle"),
+                Style = (Style)FindResource("SegmentedToggleStyle"),
                 Tag = interval,
                 IsChecked = interval == _feed.Timeframe,
             };
@@ -228,7 +251,8 @@ public partial class MainWindow : Window
         }
 
         int minutes = (int)_feed.Timeframe.TotalMinutes;
-        InstrumentTitleText.Text = $"{_contract.Spec.Description} Futures  ·  {minutes}m  ·  CME";
+        InstrumentTitleText.Text = $"{_contract.Spec.Description} Futures";
+        ChartHeaderText.Text = $"{_contract.FullSymbol}  ·  {minutes}m  ·  CME";
     }
 
     private void OnRenderTick(object? sender, EventArgs e)
@@ -236,16 +260,38 @@ public partial class MainWindow : Window
         var snapshot = _feed.Snapshot();
         Chart.UpdateFrame(snapshot.Bars, snapshot.Overlays);
         Dom.UpdateRows(snapshot.Dom);
-        CvdText.Text = snapshot.Cvd.ToString("N0");
-        BookStateText.Text = snapshot.BookValid ? "Book: valid" : $"Book: INVALID ({snapshot.BookInvalidReason})";
-        TapeText.Text = FormatTape(snapshot.Tape);
+
+        long cvd = snapshot.Cvd;
+        CvdText.Text = cvd.ToString("N0");
+        CvdText.Foreground = cvd >= 0 ? _buyBrush : _sellBrush;
+
+        UpdateBookState(snapshot.BookValid, snapshot.BookInvalidReason);
+        TapeList.ItemsSource = BuildTapeRows(snapshot.Tape);
         UpdateOhlc(snapshot.Bars);
         Heatmap.InvalidateVisual(); // repaint the heatmap from the feed's tiled history
 
         var d = snapshot.Diagnostics;
-        string latest = snapshot.Detections.Count > 0 ? $" · last: {snapshot.Detections[0].Label}" : string.Empty;
+        string latest = snapshot.Detections.Count > 0 ? $"  ·  last: {snapshot.Detections[0].Label}" : string.Empty;
         DiagnosticsText.Text =
-            $"events {d.EventsProcessed:N0} · queue {d.CurrentQueueDepth} · dropped {d.DroppedCanonicalEvents} · gaps {d.SequenceGaps} · signals {snapshot.TotalDetections:N0}{latest}";
+            $"events {d.EventsProcessed:N0}   ·   queue {d.CurrentQueueDepth}   ·   dropped {d.DroppedCanonicalEvents}   ·   gaps {d.SequenceGaps}   ·   signals {snapshot.TotalDetections:N0}{latest}";
+    }
+
+    private void UpdateBookState(bool valid, string? reason)
+    {
+        if (valid)
+        {
+            BookStateDot.Fill = _buyBrush;
+            BookStateText.Text = "Book Valid";
+            BookStateText.Foreground = _secondaryBrush;
+            BookStateChip.ToolTip = null;
+        }
+        else
+        {
+            BookStateDot.Fill = _warningBrush;
+            BookStateText.Text = "Book Invalid";
+            BookStateText.Foreground = _warningBrush;
+            BookStateChip.ToolTip = reason is null ? "Order book is temporarily invalid." : $"Order book invalid: {reason}";
+        }
     }
 
     /// <summary>Updates the header OHLC readout from the latest bar and the session change.</summary>
@@ -263,32 +309,53 @@ public partial class MainWindow : Window
         decimal low = PriceConverter.ToPrice(spec, last.LowTicks);
         decimal close = PriceConverter.ToPrice(spec, last.CloseTicks);
 
+        LastPriceText.Text = close.ToString("N2", CultureInfo.InvariantCulture);
         OpenText.Text = open.ToString("N2", CultureInfo.InvariantCulture);
         HighText.Text = high.ToString("N2", CultureInfo.InvariantCulture);
         LowText.Text = low.ToString("N2", CultureInfo.InvariantCulture);
         CloseText.Text = close.ToString("N2", CultureInfo.InvariantCulture);
 
+        long sessionVolume = 0;
+        foreach (var b in bars) sessionVolume += b.Volume;
+        VolumeText.Text = sessionVolume.ToString("N0", CultureInfo.InvariantCulture);
+
         // Session change: latest close vs the open of the oldest bar in the buffer.
         decimal sessionOpen = PriceConverter.ToPrice(spec, bars[0].OpenTicks);
         decimal change = close - sessionOpen;
         decimal pct = sessionOpen != 0 ? change / sessionOpen * 100m : 0m;
-        string sign = change >= 0 ? "+" : string.Empty;
-        ChangeText.Text = $"{sign}{change.ToString("N2", CultureInfo.InvariantCulture)} ({sign}{pct.ToString("N2", CultureInfo.InvariantCulture)}%)";
-        ChangeText.Foreground = (Brush)FindResource(change >= 0 ? "BullishBrush" : "BearishBrush");
+        string sign = change >= 0 ? "+" : "−";
+        var dirBrush = change >= 0 ? _buyBrush : _sellBrush;
+        ChangeText.Text = $"{sign}{Math.Abs(change).ToString("N2", CultureInfo.InvariantCulture)}";
+        ChangePctText.Text = $"{sign}{Math.Abs(pct).ToString("N2", CultureInfo.InvariantCulture)}%";
+        ChangeText.Foreground = dirBrush;
+        ChangePctText.Foreground = dirBrush;
     }
 
-    private static string FormatTape(IReadOnlyList<Charting.Tape.TapeRow> rows)
+    /// <summary>Row view-model for the Time &amp; Sales feed (display-only fields).</summary>
+    public sealed record TapeRowVm(string Time, string Price, string Size, string Side, Brush SideBrush, Brush RowBackground);
+
+    private List<TapeRowVm> BuildTapeRows(IReadOnlyList<Charting.Tape.TapeRow> rows)
     {
-        var sb = new StringBuilder();
-        int n = Math.Min(12, rows.Count);
+        var spec = _contract!.Spec;
+        int n = Math.Min(30, rows.Count);
+        var list = new List<TapeRowVm>(n);
         for (int i = 0; i < n; i++)
         {
             var r = rows[i];
-            string side = r.Aggressor == Domain.Events.AggressorSide.Buy ? "B" : r.Aggressor == Domain.Events.AggressorSide.Sell ? "S" : "·";
-            sb.AppendLine($"{r.ExchangeTimestampUtc:HH:mm:ss}  {side}  {r.Quantity,4}{(r.IsLarge ? "  *" : string.Empty)}");
+            bool buy = r.Aggressor == Domain.Events.AggressorSide.Buy;
+            bool sell = r.Aggressor == Domain.Events.AggressorSide.Sell;
+            string side = buy ? "B" : sell ? "S" : "·";
+            Brush sideBrush = buy ? _buyBrush : sell ? _sellBrush : _neutralBrush;
+            Brush rowBg = r.IsLarge ? (buy ? _buySoftBrush : _sellSoftBrush) : Brushes.Transparent;
+            decimal price = PriceConverter.ToPrice(spec, r.PriceTicks);
+            list.Add(new TapeRowVm(
+                r.ExchangeTimestampUtc.ToLocalTime().ToString("HH:mm:ss", CultureInfo.InvariantCulture),
+                price.ToString("N2", CultureInfo.InvariantCulture),
+                r.Quantity.ToString("N0", CultureInfo.InvariantCulture),
+                side, sideBrush, rowBg));
         }
 
-        return sb.ToString();
+        return list;
     }
 
     private async void OnClosed(object? sender, EventArgs e)
@@ -300,10 +367,10 @@ public partial class MainWindow : Window
     private void ApplyViewModel()
     {
         InstrumentTitleText.Text = _viewModel.SelectedInstrument;
-        ContractText.Text = "(discovering…)";
+        ContractText.Text = "…";
         SessionText.Text = _viewModel.SessionLabel;
-        SimulatedBanner.Text = _viewModel.SimulatedDataBanner;
-        ReadOnlyBanner.Text = _viewModel.ReadOnlyBanner;
+        SimulatedBanner.Text = "SIMULATED DATA";
+        ReadOnlyBanner.Text = "READ ONLY";
         RithmicStatusText.Text = _viewModel.RithmicStatus;
     }
 }
