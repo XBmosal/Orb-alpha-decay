@@ -63,7 +63,7 @@ public sealed class FootprintRenderer
             if (!drawCells)
             {
                 if (s.ShowPoc && bar.PocTicks != long.MinValue)
-                    canvas.DrawRect(cx - half, vp.PriceToY(bar.PocTicks) - rowH / 2f, half * 2f, Math.Max(1.5f, rowH), p.PocFill);
+                    RoundRect(canvas, cx - half, vp.PriceToY(bar.PocTicks) - rowH / 2f, half * 2f, Math.Max(1.5f, rowH), rowH, p.PocFill);
                 continue;
             }
 
@@ -87,7 +87,7 @@ public sealed class FootprintRenderer
 
                 DrawBackground(canvas, s, lvl, cx, half, y, rh, normBg, dim);
                 if (s.ShowPoc && lvl.IsPoc)
-                    canvas.DrawRect(cx - half, y - rowH / 2f, half * 2f, rowH, p.PocFill);
+                    RoundRect(canvas, cx - half, y - rowH / 2f, half * 2f, rowH, rowH, p.PocFill);
 
                 DrawLayoutFill(canvas, s, lvl, cx, half, y, rh, normMetric, dim, p);
 
@@ -150,8 +150,8 @@ public sealed class FootprintRenderer
         var baseColor = BgColor(lvl, src);
         byte a = (byte)Math.Clamp(intensity * 150 * s.CellOpacity * dim, 0, 200);
         if (a < 6) return;
-        using var bg = new SKPaint { Color = baseColor.WithAlpha(a).ToSkColor() };
-        canvas.DrawRect(cx - half, y - rh / 2f, half * 2f, rh, bg);
+        using var bg = new SKPaint { Color = baseColor.WithAlpha(a).ToSkColor(), IsAntialias = true };
+        RoundRect(canvas, cx - half, y - rh / 2f, half * 2f, rh, rh, bg);
     }
 
     private void DrawLayoutFill(SKCanvas canvas, FootprintSettings s, in FootprintPriceLevel lvl,
@@ -201,7 +201,7 @@ public sealed class FootprintRenderer
         if (lvl.IsSellImbalance) canvas.DrawRect(cx - half, y - rh / 2f, half, rh, p.SellOutline);
         if (s.ShowZeroPrints && lvl.IsZeroPrint) canvas.DrawCircle(cx, y, Math.Min(rh, half) * 0.18f + 1.5f, p.ZeroMark);
         if (s.ShowLargeTrades && lvl.LargeTradeCount > 0)
-            canvas.DrawRect(cx - half, y - rh / 2f, half * 2f, rh, p.LargeOutline);
+            RoundRect(canvas, cx - half, y - rh / 2f, half * 2f, rh, rh, p.LargeOutline);
         if (s.VisualLayout == FootprintVisualLayout.OutlineCell && (lvl.IsBuyImbalance || lvl.IsSellImbalance))
         {
             var outline = lvl.IsBuyImbalance ? p.BuyOutline : p.SellOutline;
@@ -223,13 +223,12 @@ public sealed class FootprintRenderer
 
         bool large = s.ShowLargeTrades && lvl.LargeTradeCount > 0;
         byte ta = (byte)Math.Clamp(255 * s.TextOpacity * dim, 30, 255);
-        float yb = y + fontSize * 0.34f;
 
         if (s.VisualLayout == FootprintVisualLayout.Ladder)
         {
             // bid (left, purple) | ask (right, green), aligned columns.
-            DrawText(canvas, lvl.BidVolume.ToString("N0"), cx - half + 3, yb, p.SellText, ta, large, SKTextAlign.Left);
-            DrawText(canvas, lvl.AskVolume.ToString("N0"), cx + half - 3, yb, p.BuyText, ta, large, SKTextAlign.Right);
+            DrawText(canvas, lvl.BidVolume.ToString("N0"), cx - half + 3, y, p.SellText, ta, large, SKTextAlign.Left);
+            DrawText(canvas, lvl.AskVolume.ToString("N0"), cx + half - 3, y, p.BuyText, ta, large, SKTextAlign.Right);
             return;
         }
 
@@ -240,7 +239,7 @@ public sealed class FootprintRenderer
                 string sep = s.Separator switch { CellSeparator.Pipe => "|", CellSeparator.Slash => "/", _ => "×" };
                 string text = s.HideZeros && lvl.TotalVolume == 0 ? "" : $"{lvl.BidVolume}{sep}{lvl.AskVolume}";
                 var paint = lvl.AskVolume >= lvl.BidVolume ? p.BuyText : p.SellText;
-                if (text.Length > 0) DrawText(canvas, text, cx - half + 4, yb, paint, ta, large, SKTextAlign.Left);
+                if (text.Length > 0) DrawText(canvas, text, cx - half + 4, y, paint, ta, large, SKTextAlign.Left);
                 return;
             }
         }
@@ -252,7 +251,7 @@ public sealed class FootprintRenderer
         var align = s.VisualLayout == FootprintVisualLayout.SingleValue || s.VisualLayout == FootprintVisualLayout.Hybrid
             ? SKTextAlign.Center : SKTextAlign.Left;
         float tx = align == SKTextAlign.Center ? cx : cx - half + 4;
-        DrawText(canvas, txt, tx, yb, col, ta, large, align);
+        DrawText(canvas, txt, tx, y, col, ta, large, align);
     }
 
     private void DrawFooter(SKCanvas canvas, ChartViewport vp, FootprintBar bar, float cx, float fontSize)
@@ -343,15 +342,26 @@ public sealed class FootprintRenderer
         paint.Color = prev;
     }
 
-    private static void DrawText(SKCanvas canvas, string text, float x, float yb, SKPaint paint, byte alpha, bool bold, SKTextAlign align)
+    private static void DrawText(SKCanvas canvas, string text, float x, float yCenter, SKPaint paint, byte alpha, bool bold, SKTextAlign align)
     {
         paint.TextAlign = align;
         paint.FakeBoldText = bold;
         var prev = paint.Color;
         paint.Color = prev.WithAlpha(alpha);
-        canvas.DrawText(text, x, yb, paint);
+        // Vertically centre on the row using font metrics (crisper than a fixed offset).
+        var fm = paint.FontMetrics;
+        float baseline = MathF.Round(yCenter - (fm.Ascent + fm.Descent) / 2f);
+        canvas.DrawText(text, MathF.Round(x), baseline, paint);
         paint.Color = prev;
         paint.FakeBoldText = false;
+    }
+
+    /// <summary>Rounded rectangle with a corner radius capped to a fraction of the row height.</summary>
+    private static void RoundRect(SKCanvas canvas, float x, float y, float w, float h, float rowH, SKPaint paint)
+    {
+        if (w <= 0 || h <= 0) return;
+        float r = Math.Clamp(rowH * 0.22f, 0f, 2.5f);
+        canvas.DrawRoundRect(SKRect.Create(x, y, w, h), r, r, paint);
     }
 
     private void DrawCenteredHint(SKCanvas canvas, ChartViewport vp, string message)
@@ -377,7 +387,7 @@ public sealed class FootprintRenderer
 
         public Paints(ChartPalette pal, float fontSize)
         {
-            PocFill = new SKPaint { Color = pal.Warning.WithAlpha(46).ToSkColor() };
+            PocFill = new SKPaint { Color = pal.Warning.WithAlpha(46).ToSkColor(), IsAntialias = true };
             PocDot = new SKPaint { Color = pal.Warning.ToSkColor(), IsAntialias = true };
             BullBody = new SKPaint { Color = pal.BullishCandle.WithAlpha(26).ToSkColor(), IsAntialias = true };
             BearBody = new SKPaint { Color = pal.BearishCandle.WithAlpha(26).ToSkColor(), IsAntialias = true };
