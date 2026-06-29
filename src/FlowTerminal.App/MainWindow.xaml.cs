@@ -82,6 +82,8 @@ public partial class MainWindow : Window
         TemplateSaveButton.Click += (_, _) => SaveCurrentTemplate();
         TemplateNameBox.KeyDown += (_, e) => { if (e.Key == Key.Enter) SaveCurrentTemplate(); };
 
+        WirePlaybackAndEditing();
+
         Loaded += OnLoaded;
         Closed += OnClosed;
     }
@@ -505,6 +507,44 @@ public partial class MainWindow : Window
         {
             _feed.SetDetectorEnabled(key, on);
         }
+    }
+
+    // ── Undo/redo, add-indicator, and playback transport ────────────────────
+
+    private static readonly double[] Speeds = { 1, 2, 4, 8 };
+    private int _speedIdx;
+
+    private void WirePlaybackAndEditing()
+    {
+        UndoButton.Click += (_, _) => Chart.Undo();
+        RedoButton.Click += (_, _) => Chart.Redo();
+        AddIndicatorButton.Click += (_, _) => IndicatorsButton.IsChecked = true;
+
+        RestartButton.Click += async (_, _) => await _feed.RestartAsync();
+
+        PlayPauseButton.Click += (_, _) =>
+        {
+            bool paused = PlayPauseButton.IsChecked == true;
+            _feed.SetPaused(paused);
+            PlayPauseButton.Content = paused ? "▶" : "❚❚";
+            PlayPauseButton.ToolTip = paused ? "Resume" : "Pause";
+        };
+
+        SpeedButton.Click += (_, _) =>
+        {
+            _speedIdx = (_speedIdx + 1) % Speeds.Length;
+            double s = Speeds[_speedIdx];
+            _feed.SetSpeed(s);
+            SpeedButton.Content = $"{s:0}×";
+        };
+
+        // Keyboard: Ctrl+Z / Ctrl+Y for drawing undo/redo.
+        PreviewKeyDown += (_, e) =>
+        {
+            if ((Keyboard.Modifiers & ModifierKeys.Control) == 0) return;
+            if (e.Key == Key.Z) { Chart.Undo(); e.Handled = true; }
+            else if (e.Key == Key.Y) { Chart.Redo(); e.Handled = true; }
+        };
     }
 
     // ── Templates (saved chart layouts) ─────────────────────────────────────

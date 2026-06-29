@@ -206,12 +206,33 @@
                     </Border>
                 </Popup>
 
-                <!-- Connection status (right) -->
+                <Border DockPanel.Dock="Left" Style="{StaticResource VDividerStyle}" Height="20" />
+
+                <!-- Undo / redo / add indicator -->
+                <Button DockPanel.Dock="Left" x:Name="UndoButton" Style="{StaticResource IconButtonStyle}"
+                        Content="↶" ToolTip="Undo drawing" />
+                <Button DockPanel.Dock="Left" x:Name="RedoButton" Style="{StaticResource IconButtonStyle}"
+                        Content="↷" ToolTip="Redo drawing" />
+                <Button DockPanel.Dock="Left" x:Name="AddIndicatorButton" Style="{StaticResource IconButtonStyle}"
+                        Content="＋" ToolTip="Add indicator" />
+
+                <!-- Connection status (far right) -->
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
                     <Ellipse x:Name="ConnectionDot" Width="7" Height="7" Margin="0,0,7,0"
                              VerticalAlignment="Center" Fill="{StaticResource BullishBrush}" />
                     <TextBlock Text="CONNECTED" Style="{StaticResource OverlineStyle}"
                                Foreground="{StaticResource BullishBrush}" VerticalAlignment="Center" />
+                </StackPanel>
+
+                <Border DockPanel.Dock="Right" Style="{StaticResource VDividerStyle}" Height="20" />
+
+                <!-- Playback transport -->
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="PLAYBACK" Style="{StaticResource OverlineStyle}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                    <Button x:Name="RestartButton" Style="{StaticResource IconButtonStyle}" Content="↺" ToolTip="Restart session" />
+                    <ToggleButton x:Name="PlayPauseButton" Style="{StaticResource IconToggleStyle}" Content="❚❚" ToolTip="Pause / resume" />
+                    <Button x:Name="SpeedButton" Style="{StaticResource IconButtonStyle}" Width="Auto" Padding="9,0"
+                            Content="1×" ToolTip="Playback speed" />
                 </StackPanel>
             </DockPanel>
         </Border>
@@ -564,7 +585,7 @@
                 </StackPanel>
 
                 <!-- Connection + version -->
-                <TextBlock DockPanel.Dock="Right" Text="v0.28.0" Style="{StaticResource TextMutedStyle}"
+                <TextBlock DockPanel.Dock="Right" Text="v0.29.0" Style="{StaticResource TextMutedStyle}"
                            VerticalAlignment="Center" Margin="14,0,0,0" />
                 <Border DockPanel.Dock="Right" Style="{StaticResource VDividerStyle}" Height="18" />
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">

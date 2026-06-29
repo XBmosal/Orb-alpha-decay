@@ -139,6 +139,55 @@ public sealed class LiveFeedService : IAsyncDisposable
 
     private static decimal DefaultStartPrice(RootSymbol root) => root == RootSymbol.ES ? 5_000m : 20_000m;
 
+    // ── Playback transport (pause / speed / restart) ────────────────────────
+
+    private bool _paused;
+    private double _speed = 1.0;
+
+    /// <summary>Whether the paced stream is currently paused.</summary>
+    public bool IsPaused => _paused;
+
+    /// <summary>Current playback speed multiplier.</summary>
+    public double Speed => _speed;
+
+    /// <summary>Pauses or resumes the live (simulated) stream.</summary>
+    public void SetPaused(bool paused)
+    {
+        _paused = paused;
+        (_provider as MockMarketDataProvider)?.SetPaused(paused);
+    }
+
+    /// <summary>Sets the playback speed (e.g. 2.0 = twice real time).</summary>
+    public void SetSpeed(double multiplier)
+    {
+        _speed = multiplier;
+        (_provider as MockMarketDataProvider)?.SetSpeed(multiplier);
+    }
+
+    /// <summary>Restarts the session from a fresh warm-up at the current contract/timeframe.</summary>
+    public async Task RestartAsync()
+    {
+        if (_contract is null || Interlocked.Exchange(ref _switching, 1) == 1)
+        {
+            return;
+        }
+
+        try
+        {
+            await StopFeedAsync().ConfigureAwait(false);
+            lock (_lock)
+            {
+                ResetSessionState();
+            }
+
+            await StartFeedAsync().ConfigureAwait(false);
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _switching, 0);
+        }
+    }
+
     /// <summary>
     /// Switches the bar timeframe. The current feed is stopped, the per-session
     /// analytics are reset, history is re-warmed at the new interval and the live
@@ -190,8 +239,11 @@ public sealed class LiveFeedService : IAsyncDisposable
             ? PriceConverter.ToPrice(_contract!.Spec, _lastWarmPriceTicks)
             : startPrice;
 
-        _provider = new MockMarketDataProvider(
+        var mock = new MockMarketDataProvider(
             1, _contract!, new SyntheticOptions { Seed = 7, StartPrice = liveStart }, realTimePacing: true);
+        mock.SetPaused(_paused);   // preserve transport state across restarts/switches
+        mock.SetSpeed(_speed);
+        _provider = mock;
         _pipeline = new InstrumentPipeline(1, ProcessAsync, _diagnostics);
         _pipeline.Start();
 

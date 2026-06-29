@@ -37,7 +37,9 @@ public sealed class SkiaChartHost : SKElement
     private readonly VolumeStripRenderer _volumeStrip = new();
     private readonly PriceMarkerRenderer _priceMarker = new();
     private readonly DrawingRenderer _drawingRenderer = new();
-    private readonly List<ChartDrawing> _drawings = new();
+    private List<ChartDrawing> _drawings = new();
+    private readonly Stack<List<ChartDrawing>> _undo = new();
+    private readonly Stack<List<ChartDrawing>> _redo = new();
     private ChartDrawing? _pending;
     private bool _drawing;
     private ChartViewport? _lastViewport;
@@ -52,9 +54,35 @@ public sealed class SkiaChartHost : SKElement
     /// <summary>Removes every drawing from the chart.</summary>
     public void ClearDrawings()
     {
-        _drawings.Clear();
+        if (_drawings.Count == 0) return;
+        PushUndo();
+        _drawings = new List<ChartDrawing>();
         _pending = null;
         InvalidateVisual();
+    }
+
+    public void Undo()
+    {
+        if (_undo.Count == 0) return;
+        _redo.Push(new List<ChartDrawing>(_drawings));
+        _drawings = _undo.Pop();
+        _pending = null;
+        InvalidateVisual();
+    }
+
+    public void Redo()
+    {
+        if (_redo.Count == 0) return;
+        _undo.Push(new List<ChartDrawing>(_drawings));
+        _drawings = _redo.Pop();
+        _pending = null;
+        InvalidateVisual();
+    }
+
+    private void PushUndo()
+    {
+        _undo.Push(new List<ChartDrawing>(_drawings));
+        _redo.Clear();
     }
 
     /// <summary>Tick size for axis price labels (NQ/ES = 0.25). Set from the instrument spec.</summary>
@@ -212,6 +240,7 @@ public sealed class SkiaChartHost : SKElement
             ReleaseMouseCapture();
             if (_pending is not null)
             {
+                PushUndo();
                 _drawings.Add(_pending);
                 _pending = null;
             }
@@ -273,7 +302,11 @@ public sealed class SkiaChartHost : SKElement
             if (d < best) { best = d; hit = i; }
         }
 
-        if (hit >= 0) _drawings.RemoveAt(hit);
+        if (hit >= 0)
+        {
+            PushUndo();
+            _drawings.RemoveAt(hit);
+        }
     }
 
     private float DistanceTo(ChartDrawing d, ChartViewport vp, float px, float py)
