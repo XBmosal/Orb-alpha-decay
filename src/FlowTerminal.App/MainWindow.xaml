@@ -564,7 +564,7 @@
             <DockPanel LastChildFill="False" Margin="14,6">
 
                 <!-- Diagnostics metric chips -->
-                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
+                <StackPanel x:Name="DiagnosticsChips" DockPanel.Dock="Left" Orientation="Horizontal">
                     <StackPanel Margin="0,0,20,0">
                         <TextBlock Text="EVENTS/SEC" Style="{StaticResource OverlineStyle}" />
                         <TextBlock x:Name="MetricEventsRate" Style="{StaticResource MetricValueStyle}" Text="0" />
@@ -602,7 +602,7 @@
                 </StackPanel>
 
                 <!-- Connection + version -->
-                <TextBlock DockPanel.Dock="Right" Text="v0.34.0" Style="{StaticResource TextMutedStyle}"
+                <TextBlock DockPanel.Dock="Right" Text="v0.35.0" Style="{StaticResource TextMutedStyle}"
                            VerticalAlignment="Center" Margin="14,0,0,0" />
                 <Border DockPanel.Dock="Right" Style="{StaticResource VDividerStyle}" Height="18" />
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">

@@ -24,6 +24,7 @@
     <ProjectReference Include="..\..\src\FlowTerminal.MarketData\FlowTerminal.MarketData.csproj" />
     <ProjectReference Include="..\..\src\FlowTerminal.Domain\FlowTerminal.Domain.csproj" />
     <ProjectReference Include="..\..\src\FlowTerminal.Infrastructure\FlowTerminal.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\FlowTerminal.OrderBook\FlowTerminal.OrderBook.csproj" />
   </ItemGroup>
 
 </Project>

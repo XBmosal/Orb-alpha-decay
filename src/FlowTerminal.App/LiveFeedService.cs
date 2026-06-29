@@ -102,6 +102,13 @@ public sealed class LiveFeedService : IAsyncDisposable
     /// <summary>The contract the feed is currently streaming.</summary>
     public Contract? Contract => _contract;
 
+    /// <summary>
+    /// Realism diagnostics for the in-flight synthetic session (regime, spread, level
+    /// distribution, executed/trade totals), or null on a non-mock feed. For the
+    /// debug readout only — observational, never affects rendering or the stream.
+    /// </summary>
+    public SyntheticDiagnostics? SyntheticDiagnostics => (_provider as MockMarketDataProvider)?.SyntheticDiagnostics;
+
     public Task StartAsync(Contract contract)
     {
         _contract = contract;
@@ -326,7 +333,10 @@ public sealed class LiveFeedService : IAsyncDisposable
         var gen = new SyntheticSessionGenerator(1, contract, warmStart,
             new SyntheticOptions { Seed = 7, StartPrice = startPrice });
 
-        for (int guard = 0; guard < 8_000_000; guard++)
+        // The stateful engine emits several canonical events per simulation step, so a
+        // full 8h warm window needs a higher iteration ceiling than the old one-event
+        // generator. The loop still exits the moment it reaches "now".
+        for (int guard = 0; guard < 24_000_000; guard++)
         {
             var e = gen.Next();
             if (e.ExchangeTimestampUtc >= now)

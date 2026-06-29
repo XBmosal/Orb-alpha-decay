@@ -764,6 +764,28 @@ public partial class MainWindow : Window
         MetricGaps.Foreground = d.SequenceGaps > 0 ? _warningBrush : _secondaryBrush;
         MetricSignals.Text = snapshot.TotalDetections.ToString("N0", CultureInfo.InvariantCulture);
         MetricLastSignal.Text = snapshot.Detections.Count > 0 ? snapshot.Detections[0].Label : "—";
+
+        UpdateSyntheticRealism();
+    }
+
+    /// <summary>
+    /// Surfaces the synthetic order-book realism diagnostics as a hover tooltip on the
+    /// diagnostics chips (a debug-only affordance; it adds no visible styling). Shows
+    /// the live regime, spread, level distribution and executed/trade totals so the
+    /// mock market's realism can be inspected without affecting the rendered view.
+    /// </summary>
+    private void UpdateSyntheticRealism()
+    {
+        if (_feed.SyntheticDiagnostics is not { } d)
+        {
+            return;
+        }
+
+        DiagnosticsChips.ToolTip =
+            $"Synthetic book · {d.Regime}\n" +
+            $"Spread: {d.SpreadTicks} tick(s)   Levels: {d.BidLevels} bid / {d.AskLevels} ask\n" +
+            $"Level size — median {d.MedianLevelSize:N0}, max {d.MaxLevelSize:N0}, walls {d.WallCount}\n" +
+            $"Executed: {d.TotalExecuted:N0} over {d.TradeCount:N0} trades   Events: {d.EventCount:N0}";
     }
 
     private void UpdateBookState(bool valid, string? reason)

@@ -27,6 +27,14 @@ public sealed class MockMarketDataProvider : IMarketDataProvider
     private ConnectionState _state = ConnectionState.Disconnected;
     private int _pausedFlag;            // 0 = playing, 1 = paused
     private int _speedPermille = 1000;  // playback speed × 1000 (1000 = 1.0×)
+    private volatile SyntheticSessionGenerator? _generator;
+
+    /// <summary>
+    /// Realism diagnostics for the in-flight synthetic session (regime, spread,
+    /// level distribution, executed totals). Null before streaming starts. Exposed
+    /// for the debug/diagnostics readout only — it never affects the event stream.
+    /// </summary>
+    public SyntheticDiagnostics? SyntheticDiagnostics => _generator?.Engine.Diagnostics;
 
     /// <summary>Pauses or resumes the paced stream (no effect when pacing is off).</summary>
     public void SetPaused(bool paused) => Interlocked.Exchange(ref _pausedFlag, paused ? 1 : 0);
@@ -79,6 +87,7 @@ public sealed class MockMarketDataProvider : IMarketDataProvider
     public async IAsyncEnumerable<MarketEvent> StreamAsync([EnumeratorCancellation] CancellationToken cancellationToken)
     {
         var generator = new SyntheticSessionGenerator(_instrumentId, _contract, _clock.UtcNow, _options);
+        _generator = generator;
         DateTime? lastTs = null;
 
         while (!cancellationToken.IsCancellationRequested)
