@@ -104,6 +104,44 @@ public class InstrumentPipelineTests
         Assert.Equal(0, diag.DroppedCanonicalEvents);
     }
 
+    [Fact]
+    public async Task Downstream_Fault_On_One_Event_Is_Isolated_And_Ingestion_Continues()
+    {
+        var diag = new PipelineDiagnostics();
+        int seen = 0, processedOk = 0;
+
+        await using var pipeline = new InstrumentPipeline(
+            instrumentId: 1,
+            downstream: (_, _) =>
+            {
+                int n = Interlocked.Increment(ref seen);
+                if (n == 3) throw new InvalidOperationException("bad event #3"); // simulate an analytics fault
+                Interlocked.Increment(ref processedOk);
+                return ValueTask.CompletedTask;
+            },
+            diagnostics: diag);
+        pipeline.Start();
+
+        MarketEvent Make(long seq) => MarketEvent.Quote(
+            1, RootSymbol.NQ, "NQZ5", "CME Globex", MarketEventType.BidUpdate,
+            Start, Start, Side.Bid, 100, 1, exchangeSequence: seq,
+            flags: MarketEventFlags.HasExchangeSequence);
+
+        for (long seq = 1; seq <= 6; seq++)
+        {
+            await pipeline.EnqueueAsync(Make(seq), CancellationToken.None);
+        }
+
+        pipeline.Complete();
+        await WaitUntil(() => Volatile.Read(ref seen) >= 6, TimeSpan.FromSeconds(10));
+
+        // The faulting event was isolated (counted as a processing error), and every
+        // later event still flowed — the feed did not freeze.
+        Assert.Equal(1, diag.ProcessingErrors);
+        Assert.Equal(5, Volatile.Read(ref processedOk)); // 6 seen − 1 faulted
+        Assert.Equal(0, diag.DroppedCanonicalEvents);
+    }
+
     private static async Task WaitUntil(Func<bool> condition, TimeSpan timeout)
     {
         var sw = System.Diagnostics.Stopwatch.StartNew();

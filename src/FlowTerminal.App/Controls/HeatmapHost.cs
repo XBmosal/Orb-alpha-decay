@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Input;
+using FlowTerminal.Charting;
 using FlowTerminal.Charting.Heatmap;
 using SkiaSharp;
 using SkiaSharp.Views.Desktop;
@@ -126,6 +127,10 @@ public sealed class HeatmapHost : SKElement
             return;
         }
 
-        _feed.RenderBookmap(canvas, new SKRect(0, 0, e.Info.Width, e.Info.Height), _view);
+        var bounds = new SKRect(0, 0, e.Info.Width, e.Info.Height);
+        if (!RenderSafety.Guard(canvas, bounds, () => _feed.RenderBookmap(canvas, bounds, _view), label: "Heatmap view paused"))
+        {
+            RenderGuard.LogThrottled("heatmap");
+        }
     }
 }

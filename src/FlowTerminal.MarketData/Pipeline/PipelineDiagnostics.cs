@@ -18,6 +18,7 @@ public sealed class PipelineDiagnostics
     private long _currentQueueDepth;
     private long _maxQueueDepth;
     private long _invalidationCount;
+    private long _processingErrors;
 
     public long EventsIngested => Interlocked.Read(ref _eventsIngested);
     public long EventsProcessed => Interlocked.Read(ref _eventsProcessed);
@@ -30,11 +31,15 @@ public sealed class PipelineDiagnostics
     public long MaxQueueDepth => Interlocked.Read(ref _maxQueueDepth);
     public long InvalidationCount => Interlocked.Read(ref _invalidationCount);
 
+    /// <summary>Downstream faults isolated per event so ingestion keeps running (not data loss).</summary>
+    public long ProcessingErrors => Interlocked.Read(ref _processingErrors);
+
     public void OnIngested() => Interlocked.Increment(ref _eventsIngested);
     public void OnProcessed() => Interlocked.Increment(ref _eventsProcessed);
     public void OnSequenceGap() => Interlocked.Increment(ref _sequenceGaps);
     public void OnDuplicate() => Interlocked.Increment(ref _duplicateEvents);
     public void OnInvalidation() => Interlocked.Increment(ref _invalidationCount);
+    public void OnProcessingError() => Interlocked.Increment(ref _processingErrors);
     public void OnCoalescedVisualUpdate() => Interlocked.Increment(ref _coalescedVisualUpdates);
     public void OnDroppedVisualUpdate() => Interlocked.Increment(ref _droppedVisualUpdates);
 
@@ -63,7 +68,8 @@ public sealed class PipelineDiagnostics
 
     public DiagnosticsSnapshot Snapshot() => new(
         EventsIngested, EventsProcessed, DroppedCanonicalEvents, SequenceGaps, DuplicateEvents,
-        CoalescedVisualUpdates, DroppedVisualUpdates, CurrentQueueDepth, MaxQueueDepth, InvalidationCount);
+        CoalescedVisualUpdates, DroppedVisualUpdates, CurrentQueueDepth, MaxQueueDepth, InvalidationCount,
+        ProcessingErrors);
 }
 
 public readonly record struct DiagnosticsSnapshot(
@@ -76,4 +82,5 @@ public readonly record struct DiagnosticsSnapshot(
     long DroppedVisualUpdates,
     long CurrentQueueDepth,
     long MaxQueueDepth,
-    long InvalidationCount);
+    long InvalidationCount,
+    long ProcessingErrors = 0);

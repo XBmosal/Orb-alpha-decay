@@ -343,6 +343,18 @@ public sealed class SkiaChartHost : SKElement
 
     protected override void OnPaintSurface(SKPaintSurfaceEventArgs e)
     {
+        // Isolate any render fault to this panel: a bad frame paints a "view paused"
+        // card instead of taking down the whole terminal via the WPF render loop.
+        var canvas = e.Surface.Canvas;
+        var bounds = new SKRect(0, 0, e.Info.Width, e.Info.Height);
+        if (!RenderSafety.Guard(canvas, bounds, () => PaintChart(e), _renderer.Palette, "Chart view paused"))
+        {
+            RenderGuard.LogThrottled("chart");
+        }
+    }
+
+    private void PaintChart(SKPaintSurfaceEventArgs e)
+    {
         var canvas = e.Surface.Canvas;
         float w = e.Info.Width;
         float h = e.Info.Height;

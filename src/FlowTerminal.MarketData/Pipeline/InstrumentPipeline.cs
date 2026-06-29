@@ -154,8 +154,22 @@ public sealed class InstrumentPipeline : IAsyncDisposable
         // 2) Recording (buffered; does not block ingestion meaningfully).
         _recorder.Record(in marketEvent);
 
-        // 3) Downstream analytics / book / UI snapshot publisher.
-        await _downstream(marketEvent, cancellationToken).ConfigureAwait(false);
+        // 3) Downstream analytics / book / UI snapshot publisher. A fault here (e.g. a
+        //    bad indicator or footprint calculation) is isolated to this one event so the
+        //    consumer keeps draining the channel — one bad event must not freeze the feed.
+        try
+        {
+            await _downstream(marketEvent, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw; // shutdown: let the consumer loop unwind
+        }
+        catch
+        {
+            _diagnostics.OnProcessingError();
+            return;
+        }
 
         _diagnostics.OnProcessed();
     }

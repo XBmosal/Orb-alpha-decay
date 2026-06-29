@@ -34,7 +34,11 @@ public sealed class CvdHost : SKElement
         if (w <= 0 || h <= 0 || _bars.Count == 0) return;
 
         var rect = new SKRect(8, 6, w - 8, h - 6);
-        if (DisplayMode == Mode.Candles) _renderer.RenderCandles(canvas, rect, _bars);
-        else _renderer.RenderLine(canvas, rect, _bars);
+        bool ok = RenderSafety.Guard(canvas, new SKRect(0, 0, w, h), () =>
+        {
+            if (DisplayMode == Mode.Candles) _renderer.RenderCandles(canvas, rect, _bars);
+            else _renderer.RenderLine(canvas, rect, _bars);
+        }, _palette, "CVD view paused");
+        if (!ok) RenderGuard.LogThrottled("cvd");
     }
 }

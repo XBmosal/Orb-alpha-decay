@@ -39,6 +39,13 @@ public partial class App : Application
                 ShowFatal(ex);
             }
         };
+        // Faulted background tasks (feed pump, storage, replay) must be logged rather
+        // than finalized silently; mark observed so they never escalate to a crash.
+        System.Threading.Tasks.TaskScheduler.UnobservedTaskException += (_, args) =>
+        {
+            Log.Error(args.Exception, "Unobserved background task exception");
+            args.SetObserved();
+        };
 
         try
         {
