@@ -81,6 +81,10 @@ public sealed class LiveFeedService : IAsyncDisposable
     private readonly BookmapRenderer _bookmapRenderer = new();
     private readonly List<TradeDot> _tradeDots = new(); // recent executions for heatmap bubbles
     private long _lastTradeTicks;
+    private long _heatmapMinSize; // contrast filter: hide resting levels below this size
+
+    /// <summary>Sets the heatmap contrast filter — resting levels smaller than this are hidden.</summary>
+    public void SetHeatmapMinSize(long minSize) => _heatmapMinSize = Math.Max(0, minSize);
     private readonly DetectorEngine _detectors = new(RootSymbol.NQ);
     private readonly PipelineDiagnostics _diagnostics = new();
 
@@ -580,7 +584,7 @@ public sealed class LiveFeedService : IAsyncDisposable
                 : _lastTradeTicks > 0 ? _lastTradeTicks : 80_000;
             var (lo, hi) = HeatmapWindow(mid);
             decimal tick = _contract?.Spec.TickSize ?? 0.25m;
-            _bookmapRenderer.Render(canvas, bounds, _heatmap, _tradeDots, bid, ask, _lastTradeTicks, lo, hi, tick);
+            _bookmapRenderer.Render(canvas, bounds, _heatmap, _tradeDots, bid, ask, _lastTradeTicks, lo, hi, tick, _heatmapMinSize);
         }
     }
 

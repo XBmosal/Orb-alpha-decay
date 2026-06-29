@@ -533,6 +533,25 @@
                         </StackPanel>
                     </DockPanel>
                 </Border>
+
+                <!-- Contrast filter -->
+                <Border DockPanel.Dock="Bottom" Background="{StaticResource SurfaceSecondaryBrush}"
+                        BorderBrush="{StaticResource BorderSubtleBrush}" BorderThickness="0,1,0,0" Padding="12,7">
+                    <DockPanel LastChildFill="True">
+                        <TextBlock DockPanel.Dock="Left" Text="CONTRAST FILTER" Style="{StaticResource OverlineStyle}"
+                                   VerticalAlignment="Center" Margin="0,0,12,0" />
+                        <Border DockPanel.Dock="Right" Style="{StaticResource OutlineBadgeStyle}" Padding="8,2" Margin="12,0,0,0">
+                            <TextBlock x:Name="ContrastValueText" Style="{StaticResource MetricValueStyle}" FontSize="12"
+                                       Foreground="{StaticResource AccentBrush}" Text="≥ 0" />
+                        </Border>
+                        <TextBlock DockPanel.Dock="Right" Text="hide passive orders below this size"
+                                   Style="{StaticResource TextMutedStyle}" VerticalAlignment="Center" Margin="12,0,0,0" />
+                        <Slider x:Name="ContrastSlider" Style="{StaticResource ThemeSliderStyle}"
+                                Minimum="0" Maximum="500" Value="0" SmallChange="5" LargeChange="25"
+                                VerticalAlignment="Center" Margin="0,0,8,0" />
+                    </DockPanel>
+                </Border>
+
                 <Border Background="{StaticResource AppBackgroundBrush}" CornerRadius="0,0,6,6" ClipToBounds="True">
                     <controls:HeatmapHost x:Name="Heatmap" />
                 </Border>
@@ -583,7 +602,7 @@
                 </StackPanel>
 
                 <!-- Connection + version -->
-                <TextBlock DockPanel.Dock="Right" Text="v0.30.0" Style="{StaticResource TextMutedStyle}"
+                <TextBlock DockPanel.Dock="Right" Text="v0.31.0" Style="{StaticResource TextMutedStyle}"
                            VerticalAlignment="Center" Margin="14,0,0,0" />
                 <Border DockPanel.Dock="Right" Style="{StaticResource VDividerStyle}" Height="18" />
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">

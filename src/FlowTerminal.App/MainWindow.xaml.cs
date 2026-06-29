@@ -85,6 +85,13 @@ public partial class MainWindow : Window
 
         WirePlaybackAndEditing();
 
+        ContrastSlider.ValueChanged += (_, e) =>
+        {
+            long min = (long)Math.Round(e.NewValue);
+            ContrastValueText.Text = $"≥ {min}";
+            _feed.SetHeatmapMinSize(min);
+        };
+
         Loaded += OnLoaded;
         Closed += OnClosed;
     }
