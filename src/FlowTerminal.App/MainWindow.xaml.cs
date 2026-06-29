@@ -37,6 +37,9 @@ public partial class MainWindow : Window
     private Brush _sellSoftBrush = Brushes.Transparent;
     private Brush _warningBrush = Brushes.Orange;
     private Brush _secondaryBrush = Brushes.Gray;
+    private Brush _mutedBrush = Brushes.Gray;
+    private Brush _pocSoftBrush = Brushes.Transparent;
+    private Brush _bestRowBrush = Brushes.Transparent;
 
     /// <summary>The selectable bar timeframes, label → interval. Minutes shown in the title.</summary>
     private static readonly (string Label, TimeSpan Interval)[] Timeframes =
@@ -63,6 +66,8 @@ public partial class MainWindow : Window
         CacheBrushes();
         BuildTimeframeBar();
         BuildChartTypeBar();
+        BuildTapeFilters();
+        BuildCvdModeBar();
         BuildIndicatorsMenu();
 
         Loaded += OnLoaded;
@@ -81,6 +86,9 @@ public partial class MainWindow : Window
         _sellSoftBrush = Brush("BearishSoftBrush", _sellSoftBrush);
         _warningBrush = Brush("WarningBrush", _warningBrush);
         _secondaryBrush = Brush("TextSecondaryBrush", _secondaryBrush);
+        _mutedBrush = Brush("TextMutedBrush", _mutedBrush);
+        _pocSoftBrush = Brush("WarningSoftBrush", _pocSoftBrush);
+        _bestRowBrush = Brush("SurfaceElevatedBrush", _bestRowBrush);
     }
 
     // ── Timeframe selector ──────────────────────────────────────────────────
@@ -162,6 +170,48 @@ public partial class MainWindow : Window
         }
 
         Chart.ChartType = type;
+    }
+
+    // ── CVD display mode ────────────────────────────────────────────────────
+
+    private enum CvdView { Number, Line, Candles }
+
+    private readonly List<ToggleButton> _cvdModeButtons = new();
+
+    private void BuildCvdModeBar()
+    {
+        foreach (var (label, val) in new[] { ("Num", CvdView.Number), ("Line", CvdView.Line), ("Candle", CvdView.Candles) })
+        {
+            var btn = new ToggleButton
+            {
+                Content = label,
+                Style = (Style)FindResource("SegmentedToggleStyle"),
+                Tag = val,
+                IsChecked = val == CvdView.Line,
+                MinWidth = 30,
+            };
+            btn.Click += OnCvdModeClick;
+            _cvdModeButtons.Add(btn);
+            CvdModeBar.Children.Add(btn);
+        }
+
+        ApplyCvdView(CvdView.Line);
+    }
+
+    private void OnCvdModeClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not ToggleButton clicked || clicked.Tag is not CvdView val) return;
+        foreach (var b in _cvdModeButtons) b.IsChecked = ReferenceEquals(b, clicked);
+        ApplyCvdView(val);
+    }
+
+    private void ApplyCvdView(CvdView view)
+    {
+        CvdNumberView.Visibility = view == CvdView.Number ? Visibility.Visible : Visibility.Collapsed;
+        CvdChartView.Visibility = view == CvdView.Number ? Visibility.Collapsed : Visibility.Visible;
+        if (view == CvdView.Candles) CvdChart.DisplayMode = Controls.CvdHost.Mode.Candles;
+        else if (view == CvdView.Line) CvdChart.DisplayMode = Controls.CvdHost.Mode.Line;
+        CvdChart.InvalidateVisual();
     }
 
     // ── Indicators menu (replaces the old checkbox list) ────────────────────
@@ -304,11 +354,16 @@ public partial class MainWindow : Window
     {
         var snapshot = _feed.Snapshot();
         Chart.UpdateFrame(snapshot.Bars, snapshot.Overlays);
-        Dom.UpdateRows(snapshot.Dom);
+        UpdateDom(snapshot);
 
         long cvd = snapshot.Cvd;
-        CvdText.Text = cvd.ToString("N0");
-        CvdText.Foreground = cvd >= 0 ? _buyBrush : _sellBrush;
+        string cvdStr = cvd.ToString("N0", CultureInfo.InvariantCulture);
+        var cvdBrush = cvd >= 0 ? _buyBrush : _sellBrush;
+        CvdText.Text = cvdStr;
+        CvdText.Foreground = cvdBrush;
+        CvdValueSmall.Text = cvdStr;
+        CvdValueSmall.Foreground = cvdBrush;
+        CvdChart.Update(snapshot.CvdSeries);
 
         UpdateBookState(snapshot.BookValid, snapshot.BookInvalidReason);
         TapeList.ItemsSource = BuildTapeRows(snapshot.Tape);
@@ -376,19 +431,127 @@ public partial class MainWindow : Window
         ChangePctText.Foreground = dirBrush;
     }
 
+    /// <summary>Row view-model for the read-only DOM ladder (display-only fields).</summary>
+    public sealed record DomRowVm(
+        string Price, string Bid, string Ask, string CumBid, string CumAsk,
+        GridLength BidFill, GridLength BidRest, GridLength AskFill, GridLength AskRest,
+        Brush RowBackground, Brush PriceBrush, Brush BidBrush, Brush AskBrush);
+
+    private void UpdateDom(ChartSnapshot snapshot)
+    {
+        var rows = snapshot.Dom;
+        if (_contract is null || rows.Count == 0)
+        {
+            DomList.ItemsSource = null;
+            BidPriceText.Text = "—";
+            AskPriceText.Text = "—";
+            SpreadText.Text = "—";
+            return;
+        }
+
+        var spec = _contract.Spec;
+        long bestBid = snapshot.BestBidTicks;
+        long bestAsk = snapshot.BestAskTicks;
+
+        long maxSize = 1;
+        foreach (var r in rows) maxSize = Math.Max(maxSize, Math.Max(r.BidSize, r.AskSize));
+
+        var list = new List<DomRowVm>(rows.Count);
+        foreach (var r in rows)
+        {
+            bool bidSide = r.PriceTicks <= bestBid;
+            bool askSide = r.PriceTicks >= bestAsk;
+            bool isBest = r.PriceTicks == bestBid || r.PriceTicks == bestAsk;
+
+            double bidFrac = bidSide ? Math.Clamp(r.BidSize / (double)maxSize, 0, 1) : 0;
+            double askFrac = askSide ? Math.Clamp(r.AskSize / (double)maxSize, 0, 1) : 0;
+
+            Brush rowBg = r.IsPoc ? _pocSoftBrush : isBest ? _bestRowBrush : Brushes.Transparent;
+            Brush priceBrush = r.PriceTicks == bestAsk ? _sellBrush
+                : r.PriceTicks == bestBid ? _buyBrush : _secondaryBrush;
+
+            list.Add(new DomRowVm(
+                PriceConverter.ToPrice(spec, r.PriceTicks).ToString("N2", CultureInfo.InvariantCulture),
+                bidSide && r.BidSize > 0 ? r.BidSize.ToString("N0", CultureInfo.InvariantCulture) : string.Empty,
+                askSide && r.AskSize > 0 ? r.AskSize.ToString("N0", CultureInfo.InvariantCulture) : string.Empty,
+                bidSide && r.CumulativeBid > 0 ? r.CumulativeBid.ToString("N0", CultureInfo.InvariantCulture) : string.Empty,
+                askSide && r.CumulativeAsk > 0 ? r.CumulativeAsk.ToString("N0", CultureInfo.InvariantCulture) : string.Empty,
+                new GridLength(bidFrac, GridUnitType.Star), new GridLength(1 - bidFrac, GridUnitType.Star),
+                new GridLength(askFrac, GridUnitType.Star), new GridLength(1 - askFrac, GridUnitType.Star),
+                rowBg, priceBrush, _buyBrush, _sellBrush));
+        }
+
+        DomList.ItemsSource = list;
+
+        if (snapshot.BookValid)
+        {
+            BidPriceText.Text = PriceConverter.ToPrice(spec, bestBid).ToString("N2", CultureInfo.InvariantCulture);
+            AskPriceText.Text = PriceConverter.ToPrice(spec, bestAsk).ToString("N2", CultureInfo.InvariantCulture);
+            decimal spread = PriceConverter.ToPrice(spec, bestAsk) - PriceConverter.ToPrice(spec, bestBid);
+            SpreadText.Text = spread.ToString("N2", CultureInfo.InvariantCulture);
+        }
+    }
+
+    // ── Time & Sales filters ────────────────────────────────────────────────
+
+    private enum SideFilter { All, Buy, Sell }
+
+    private SideFilter _tapeSide = SideFilter.All;
+    private static readonly long[] MinSizes = { 0, 10, 25, 50, 100, 250 };
+    private int _minSizeIdx;
+    private readonly List<ToggleButton> _sideFilterButtons = new();
+
+    private void BuildTapeFilters()
+    {
+        foreach (var (label, val) in new[] { ("All", SideFilter.All), ("Buy", SideFilter.Buy), ("Sell", SideFilter.Sell) })
+        {
+            var btn = new ToggleButton
+            {
+                Content = label,
+                Style = (Style)FindResource("SegmentedToggleStyle"),
+                Tag = val,
+                IsChecked = val == _tapeSide,
+                MinWidth = 30,
+            };
+            btn.Click += OnSideFilterClick;
+            _sideFilterButtons.Add(btn);
+            SideFilterBar.Children.Add(btn);
+        }
+
+        MinSizeButton.Click += (_, _) =>
+        {
+            _minSizeIdx = (_minSizeIdx + 1) % MinSizes.Length;
+            long m = MinSizes[_minSizeIdx];
+            MinSizeButton.Content = m == 0 ? "≥ 0" : $"≥ {m}";
+        };
+    }
+
+    private void OnSideFilterClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not ToggleButton clicked || clicked.Tag is not SideFilter val) return;
+        _tapeSide = val;
+        foreach (var b in _sideFilterButtons) b.IsChecked = ReferenceEquals(b, clicked);
+    }
+
     /// <summary>Row view-model for the Time &amp; Sales feed (display-only fields).</summary>
     public sealed record TapeRowVm(string Time, string Price, string Size, string Side, Brush SideBrush, Brush RowBackground);
 
     private List<TapeRowVm> BuildTapeRows(IReadOnlyList<Charting.Tape.TapeRow> rows)
     {
         var spec = _contract!.Spec;
-        int n = Math.Min(30, rows.Count);
-        var list = new List<TapeRowVm>(n);
-        for (int i = 0; i < n; i++)
+        long minSize = MinSizes[_minSizeIdx];
+        var list = new List<TapeRowVm>(Math.Min(30, rows.Count));
+        for (int i = 0; i < rows.Count && list.Count < 30; i++)
         {
             var r = rows[i];
             bool buy = r.Aggressor == Domain.Events.AggressorSide.Buy;
             bool sell = r.Aggressor == Domain.Events.AggressorSide.Sell;
+
+            // Apply the active filters (size and aggressor side).
+            if (r.Quantity < minSize) continue;
+            if (_tapeSide == SideFilter.Buy && !buy) continue;
+            if (_tapeSide == SideFilter.Sell && !sell) continue;
+
             string side = buy ? "B" : sell ? "S" : "·";
             Brush sideBrush = buy ? _buyBrush : sell ? _sellBrush : _neutralBrush;
             Brush rowBg = r.IsLarge ? (buy ? _buySoftBrush : _sellSoftBrush) : Brushes.Transparent;

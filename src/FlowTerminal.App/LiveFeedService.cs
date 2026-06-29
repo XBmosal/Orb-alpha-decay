@@ -31,7 +31,10 @@ public sealed record ChartSnapshot(
     DiagnosticsSnapshot Diagnostics,
     IReadOnlyList<Detection> Detections,
     long TotalDetections,
-    ChartOverlays Overlays);
+    ChartOverlays Overlays,
+    long BestBidTicks,
+    long BestAskTicks,
+    IReadOnlyList<CvdBar> CvdSeries);
 
 /// <summary>
 /// Drives a mock (or, when wired, live) feed through the canonical pipeline and the
@@ -58,6 +61,9 @@ public sealed class LiveFeedService : IAsyncDisposable
     private readonly TradingCalendar _calendar = new();
     private readonly List<Footprint> _barFootprints = new();
     private readonly List<FootprintColumn> _footprintColumns = new(); // 1:1 with _completed
+    private readonly List<CvdBar> _cvdBars = new();                   // CVD OHLC per completed bar
+    private long _cvdOpen, _cvdHigh, _cvdLow, _cvdClose;
+    private bool _cvdHasDev;
     private Footprint _currentFootprint = new();
     private TpoProfile? _tpo;
     private OpeningRangeBreakout? _orb;
@@ -192,6 +198,9 @@ public sealed class LiveFeedService : IAsyncDisposable
         _fvgs.Clear();
         _barFootprints.Clear();
         _footprintColumns.Clear();
+        _cvdBars.Clear();
+        _cvdOpen = _cvdHigh = _cvdLow = _cvdClose = 0;
+        _cvdHasDev = false;
         _currentFootprint = new Footprint();
         _tpo = null;
         _orb = null;
@@ -297,6 +306,16 @@ public sealed class LiveFeedService : IAsyncDisposable
             {
                 _profile.AddTrade(e);
                 _cvd.Add(e);
+                long cvdNow = _cvd.CumulativeDelta;
+                if (!_cvdHasDev)
+                {
+                    _cvdOpen = _cvdHigh = _cvdLow = cvdNow;
+                    _cvdHasDev = true;
+                }
+
+                _cvdHigh = Math.Max(_cvdHigh, cvdNow);
+                _cvdLow = Math.Min(_cvdLow, cvdNow);
+                _cvdClose = cvdNow;
                 _tape.Add(e);
                 _multiVwap.AddTrade(e.PriceTicks, e.Quantity, _calendar.TradingDate(e.ExchangeTimestampUtc));
                 _currentFootprint.AddTrade(e);
@@ -317,6 +336,10 @@ public sealed class LiveFeedService : IAsyncDisposable
                     _footprintColumns.Add(BuildFootprintColumn(completed, doneFootprint));
                     _currentFootprint = new Footprint();
 
+                    // Close out this bar's CVD candle and re-open the next at the same level.
+                    _cvdBars.Add(new CvdBar(_cvdOpen, _cvdHigh, _cvdLow, _cvdClose));
+                    _cvdOpen = _cvdHigh = _cvdLow = _cvdClose;
+
                     int absoluteIndex = _barsEvicted + _completed.Count - 1;
                     if (_fvg.OnBar(completed) is { } gap)
                     {
@@ -331,6 +354,7 @@ public sealed class LiveFeedService : IAsyncDisposable
                         _vwapByBar.RemoveRange(0, remove);
                         _barFootprints.RemoveRange(0, remove);
                         _footprintColumns.RemoveRange(0, remove);
+                        if (_cvdBars.Count >= remove) _cvdBars.RemoveRange(0, remove);
                         _barsEvicted += remove;
                     }
                 }
@@ -395,11 +419,17 @@ public sealed class LiveFeedService : IAsyncDisposable
                 _orb is { IsEstablished: true } orb2 ? orb2.LowTicks : null,
                 footprint, tpoRows);
 
+            // CVD history (completed bars + the developing bar so the line is live).
+            var cvdSeries = new List<CvdBar>(_cvdBars.Count + 1);
+            cvdSeries.AddRange(_cvdBars);
+            if (_cvdHasDev) cvdSeries.Add(new CvdBar(_cvdOpen, _cvdHigh, _cvdLow, _cvdClose));
+
             var dom = ReadOnlyDom.Build(_book, _profile, 12);
             return new ChartSnapshot(
                 bars, dom, _cvd.CumulativeDelta, _tape.Latest(50),
                 _book.IsValid, _book.InvalidReason, _diagnostics.Snapshot(),
-                _detectors.Recent(8), _detectors.TotalDetections, overlays);
+                _detectors.Recent(8), _detectors.TotalDetections, overlays,
+                _book.BestBidTicks, _book.BestAskTicks, cvdSeries);
         }
     }
 

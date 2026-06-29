@@ -191,25 +191,36 @@
                         <DockPanel>
                             <Border DockPanel.Dock="Top" Style="{StaticResource PanelHeaderBarStyle}">
                                 <DockPanel LastChildFill="False">
-                                    <TextBlock DockPanel.Dock="Left" Text="Cumulative Volume Delta"
-                                               Style="{StaticResource PanelTitleStyle}" />
-                                    <Border DockPanel.Dock="Right" x:Name="BookStateChip" Style="{StaticResource OutlineBadgeStyle}"
-                                            Padding="7,2" VerticalAlignment="Center">
-                                        <StackPanel Orientation="Horizontal">
-                                            <Ellipse x:Name="BookStateDot" Width="6" Height="6" Margin="0,0,5,0"
-                                                     VerticalAlignment="Center" Fill="{StaticResource BullishBrush}" />
-                                            <TextBlock x:Name="BookStateText" Style="{StaticResource BadgeTextStyle}"
-                                                       FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}" Text="—" />
-                                        </StackPanel>
+                                    <TextBlock DockPanel.Dock="Left" Text="CVD" Style="{StaticResource PanelTitleStyle}" />
+                                    <Border DockPanel.Dock="Right" Background="{StaticResource SurfacePrimaryBrush}"
+                                            BorderBrush="{StaticResource BorderSubtleBrush}" BorderThickness="1"
+                                            CornerRadius="5" Padding="2" VerticalAlignment="Center">
+                                        <StackPanel x:Name="CvdModeBar" Orientation="Horizontal" />
                                     </Border>
                                 </DockPanel>
                             </Border>
-                            <StackPanel Margin="14,12" VerticalAlignment="Center">
-                                <TextBlock Text="SESSION DELTA" Style="{StaticResource OverlineStyle}" Margin="0,0,0,2" />
-                                <TextBlock x:Name="CvdText" Style="{StaticResource NumericMediumStyle}" Text="0" />
-                                <TextBlock x:Name="CvdHintText" Style="{StaticResource TextMutedStyle}" Margin="0,6,0,0"
-                                           Text="Net aggressive buy − sell volume" />
-                            </StackPanel>
+
+                            <Grid>
+                                <!-- Number-only view -->
+                                <StackPanel x:Name="CvdNumberView" Margin="14,12" VerticalAlignment="Center" Visibility="Collapsed">
+                                    <TextBlock Text="SESSION DELTA" Style="{StaticResource OverlineStyle}" Margin="0,0,0,2" />
+                                    <TextBlock x:Name="CvdText" Style="{StaticResource NumericMediumStyle}" Text="0" />
+                                    <TextBlock Style="{StaticResource TextMutedStyle}" Margin="0,6,0,0"
+                                               Text="Net aggressive buy − sell volume" />
+                                </StackPanel>
+
+                                <!-- Sparkline / candles view -->
+                                <DockPanel x:Name="CvdChartView">
+                                    <Grid DockPanel.Dock="Top" Margin="12,8,12,2">
+                                        <TextBlock Text="SESSION DELTA" Style="{StaticResource OverlineStyle}" VerticalAlignment="Center" />
+                                        <TextBlock x:Name="CvdValueSmall" Style="{StaticResource MetricValueStyle}" FontSize="14"
+                                                   HorizontalAlignment="Right" Text="0" />
+                                    </Grid>
+                                    <Border Background="{StaticResource AppBackgroundBrush}" CornerRadius="0,0,6,6" ClipToBounds="True">
+                                        <controls:CvdHost x:Name="CvdChart" />
+                                    </Border>
+                                </DockPanel>
+                            </Grid>
                         </DockPanel>
                     </Border>
 
@@ -255,8 +266,15 @@
                             <DockPanel LastChildFill="False">
                                 <TextBlock DockPanel.Dock="Left" Text="Order Book" Style="{StaticResource PanelTitleStyle}" />
                                 <TextBlock DockPanel.Dock="Left" Text="MBP" Style="{StaticResource OverlineStyle}" Margin="8,0,0,0" VerticalAlignment="Center" />
-                                <TextBlock DockPanel.Dock="Right" Text="READ-ONLY" Style="{StaticResource OverlineStyle}"
-                                           Foreground="{StaticResource ReadOnlyBrush}" VerticalAlignment="Center" />
+                                <Border DockPanel.Dock="Right" x:Name="BookStateChip" Style="{StaticResource OutlineBadgeStyle}"
+                                        Padding="7,2" VerticalAlignment="Center">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Ellipse x:Name="BookStateDot" Width="6" Height="6" Margin="0,0,5,0"
+                                                 VerticalAlignment="Center" Fill="{StaticResource BullishBrush}" />
+                                        <TextBlock x:Name="BookStateText" Style="{StaticResource BadgeTextStyle}"
+                                                   FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}" Text="—" />
+                                    </StackPanel>
+                                </Border>
                             </DockPanel>
                         </Border>
                         <!-- Column header -->
@@ -264,18 +282,96 @@
                                 BorderBrush="{StaticResource DividerBrush}" BorderThickness="0,0,0,1">
                             <Grid>
                                 <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="74" />
+                                    <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="BID" Style="{StaticResource ColumnHeaderStyle}"
-                                           Foreground="{StaticResource BidBrush}" />
-                                <TextBlock Grid.Column="1" Text="PRICE" Style="{StaticResource ColumnHeaderStyle}" TextAlignment="Center" />
+                                <TextBlock Grid.Column="0" Text="PRICE" Style="{StaticResource ColumnHeaderStyle}" Margin="10,0,0,0" />
+                                <TextBlock Grid.Column="1" Text="BID" Style="{StaticResource ColumnHeaderStyle}"
+                                           Foreground="{StaticResource BullishBrush}" TextAlignment="Right" Margin="0,0,8,0" />
                                 <TextBlock Grid.Column="2" Text="ASK" Style="{StaticResource ColumnHeaderStyle}"
-                                           Foreground="{StaticResource AskBrush}" TextAlignment="Right" />
+                                           Foreground="{StaticResource BearishBrush}" TextAlignment="Right" Margin="0,0,8,0" />
+                                <TextBlock Grid.Column="3" Text="Σ BID" Style="{StaticResource ColumnHeaderStyle}" TextAlignment="Right" Margin="0,0,8,0" />
+                                <TextBlock Grid.Column="4" Text="Σ ASK" Style="{StaticResource ColumnHeaderStyle}" TextAlignment="Right" Margin="0,0,10,0" />
                             </Grid>
                         </Border>
-                        <controls:DomHost x:Name="Dom" />
+
+                        <!-- Spread footer -->
+                        <Border DockPanel.Dock="Bottom" Background="{StaticResource SurfaceSecondaryBrush}"
+                                BorderBrush="{StaticResource BorderSubtleBrush}" BorderThickness="0,1,0,0" Padding="12,7">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Orientation="Horizontal">
+                                    <TextBlock Text="BID" Style="{StaticResource OverlineStyle}"
+                                               Foreground="{StaticResource BullishBrush}" VerticalAlignment="Center" Margin="0,0,7,0" />
+                                    <TextBlock x:Name="BidPriceText" Style="{StaticResource MetricValueStyle}" FontSize="13"
+                                               Foreground="{StaticResource BullishBrush}" Text="—" />
+                                </StackPanel>
+                                <Border Grid.Column="1" Background="{StaticResource SurfacePrimaryBrush}" CornerRadius="4"
+                                        BorderBrush="{StaticResource BorderSubtleBrush}" BorderThickness="1" Padding="8,1" Margin="14,0">
+                                    <TextBlock x:Name="SpreadText" Style="{StaticResource CellStyle}"
+                                               Foreground="{StaticResource TextSecondaryBrush}" Text="—" />
+                                </Border>
+                                <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right">
+                                    <TextBlock Text="ASK" Style="{StaticResource OverlineStyle}"
+                                               Foreground="{StaticResource BearishBrush}" VerticalAlignment="Center" Margin="0,0,7,0" />
+                                    <TextBlock x:Name="AskPriceText" Style="{StaticResource MetricValueStyle}" FontSize="13"
+                                               Foreground="{StaticResource BearishBrush}" Text="—" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                            <ItemsControl x:Name="DomList">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Background="{Binding RowBackground}" Padding="0,2">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="74" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="{Binding Price}" Style="{StaticResource CellStyle}"
+                                                           FontWeight="SemiBold" Foreground="{Binding PriceBrush}" Margin="10,0,0,0" />
+                                                <!-- Bid size + depth bar (grows toward the ask side) -->
+                                                <Grid Grid.Column="1">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="{Binding BidRest}" />
+                                                        <ColumnDefinition Width="{Binding BidFill}" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <Border Grid.Column="1" Background="{StaticResource BullishSoftBrush}" CornerRadius="2" Margin="0,1" />
+                                                    <TextBlock Grid.ColumnSpan="2" Text="{Binding Bid}" Style="{StaticResource CellStyle}"
+                                                               Foreground="{Binding BidBrush}" TextAlignment="Right" Margin="0,0,8,0" />
+                                                </Grid>
+                                                <!-- Ask size + depth bar -->
+                                                <Grid Grid.Column="2">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="{Binding AskFill}" />
+                                                        <ColumnDefinition Width="{Binding AskRest}" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <Border Grid.Column="0" Background="{StaticResource BearishSoftBrush}" CornerRadius="2" Margin="0,1" />
+                                                    <TextBlock Grid.ColumnSpan="2" Text="{Binding Ask}" Style="{StaticResource CellStyle}"
+                                                               Foreground="{Binding AskBrush}" TextAlignment="Right" Margin="0,0,8,0" />
+                                                </Grid>
+                                                <TextBlock Grid.Column="3" Text="{Binding CumBid}" Style="{StaticResource CellStyle}"
+                                                           Foreground="{StaticResource TextMutedBrush}" TextAlignment="Right" Margin="0,0,8,0" />
+                                                <TextBlock Grid.Column="4" Text="{Binding CumAsk}" Style="{StaticResource CellStyle}"
+                                                           Foreground="{StaticResource TextMutedBrush}" TextAlignment="Right" Margin="0,0,10,0" />
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
                     </DockPanel>
                 </Border>
 
@@ -288,12 +384,14 @@
                         <Border DockPanel.Dock="Top" Style="{StaticResource PanelHeaderBarStyle}">
                             <DockPanel LastChildFill="False">
                                 <TextBlock DockPanel.Dock="Left" Text="Time &amp; Sales" Style="{StaticResource PanelTitleStyle}" />
-                                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
-                                    <Ellipse Width="6" Height="6" Margin="0,0,5,0" VerticalAlignment="Center" Fill="{StaticResource BullishBrush}" />
-                                    <TextBlock Text="BUY" Style="{StaticResource OverlineStyle}" Margin="0,0,10,0" />
-                                    <Ellipse Width="6" Height="6" Margin="0,0,5,0" VerticalAlignment="Center" Fill="{StaticResource BearishBrush}" />
-                                    <TextBlock Text="SELL" Style="{StaticResource OverlineStyle}" />
-                                </StackPanel>
+                                <Button DockPanel.Dock="Right" x:Name="MinSizeButton" Style="{StaticResource IconButtonStyle}"
+                                        Width="Auto" Padding="9,0" Margin="6,0,0,0" FontSize="11" Content="≥ 0"
+                                        ToolTip="Minimum trade size filter (click to cycle)" />
+                                <Border DockPanel.Dock="Right" Background="{StaticResource SurfacePrimaryBrush}"
+                                        BorderBrush="{StaticResource BorderSubtleBrush}" BorderThickness="1"
+                                        CornerRadius="5" Padding="2" VerticalAlignment="Center">
+                                    <StackPanel x:Name="SideFilterBar" Orientation="Horizontal" />
+                                </Border>
                             </DockPanel>
                         </Border>
                         <Border DockPanel.Dock="Top" Background="{StaticResource SurfacePrimaryBrush}" Padding="10,5"
@@ -351,7 +449,7 @@
                 <TextBlock DockPanel.Dock="Left" x:Name="DiagnosticsText" Style="{StaticResource DiagnosticsStyle}"
                            VerticalAlignment="Center" Text="" />
 
-                <TextBlock DockPanel.Dock="Right" Text="v0.24.0" Style="{StaticResource TextMutedStyle}"
+                <TextBlock DockPanel.Dock="Right" Text="v0.25.0" Style="{StaticResource TextMutedStyle}"
                            VerticalAlignment="Center" Margin="12,0,0,0" />
                 <Border DockPanel.Dock="Right" Style="{StaticResource VDividerStyle}" Height="16" />
                 <TextBlock DockPanel.Dock="Right" x:Name="RithmicStatusText" Style="{StaticResource TextMutedStyle}"
