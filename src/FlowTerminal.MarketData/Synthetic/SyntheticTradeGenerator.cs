@@ -63,6 +63,25 @@ public sealed class SyntheticTradeGenerator
         }
     }
 
+    /// <summary>
+    /// Executes a single aggressive order of the given size against the book, used by
+    /// the orchestrator and exercised directly in tests. A buy lifts asks, a sell hits
+    /// bids, always from the touch outward in strict price order.
+    /// </summary>
+    internal void ExecuteOrder(SyntheticOrderBook book, AggressorSide aggressor, long size,
+        ref DeterministicRng rng, IBookEventSink sink)
+    {
+        LastNetFlow = 0;
+        if (aggressor == AggressorSide.Buy)
+        {
+            Sweep(book, Side.Ask, AggressorSide.Buy, size, ref rng, sink, ascending: true);
+        }
+        else
+        {
+            Sweep(book, Side.Bid, AggressorSide.Sell, size, ref rng, sink, ascending: false);
+        }
+    }
+
     private void Sweep(SyntheticOrderBook book, Side restingSide, AggressorSide aggressor,
         long size, ref DeterministicRng rng, IBookEventSink sink, bool ascending)
     {

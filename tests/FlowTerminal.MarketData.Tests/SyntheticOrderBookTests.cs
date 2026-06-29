@@ -230,6 +230,69 @@ public class SyntheticOrderBookTests
     }
 
     [Fact]
+    public void Book_Rejects_Crossing_Updates_And_Stays_Valid()
+    {
+        var b = new SyntheticOrderBook();
+        b.Put(Side.Bid, Level(99, 5));
+        b.Put(Side.Ask, Level(101, 5));
+
+        // A bid at or above the best ask is rejected as a no-op (not applied).
+        Assert.False(b.Put(Side.Bid, Level(101, 5)));
+        Assert.Equal(99, b.BestBidTicks);
+
+        // An ask at or below the best bid is likewise rejected.
+        Assert.False(b.Put(Side.Ask, Level(99, 5)));
+        Assert.Equal(101, b.BestAskTicks);
+
+        Assert.False(b.IsCrossed);
+        Assert.True(b.BestBidTicks < b.BestAskTicks);
+    }
+
+    [Fact]
+    public void Aggressive_Order_Sweeps_Levels_In_Strict_Price_Order_Without_Skipping()
+    {
+        var cfg = SyntheticMarketConfiguration.ForRoot(RootSymbol.NQ);
+        var tg = new SyntheticTradeGenerator(cfg);
+        int longest = 0;
+
+        for (ulong seed = 1; seed <= 24; seed++)
+        {
+            var book = new SyntheticOrderBook();
+            book.Put(Side.Bid, Level(99, 5));
+            for (long p = 100; p < 112; p++) book.Put(Side.Ask, Level(p, 3)); // contiguous ask ladder
+
+            var sink = new RecordingSink();
+            var rng = new DeterministicRng(seed);
+            tg.ExecuteOrder(book, AggressorSide.Buy, 120, ref rng, sink);
+
+            // Every print climbs the ladder one populated level at a time from the touch:
+            // consumed prices are strictly increasing and contiguous from the best ask,
+            // proving the sweep consumes in order and never skips a resting level.
+            for (int i = 0; i < sink.Executions.Count; i++)
+            {
+                Assert.Equal(100 + i, sink.Executions[i].Price);
+            }
+
+            longest = Math.Max(longest, sink.Executions.Count);
+        }
+
+        Assert.True(longest >= 3, $"no multi-level sweep occurred (longest {longest})");
+    }
+
+    private static SyntheticLevel Level(long price, long size) =>
+        new() { PriceTicks = price, Displayed = size, TargetSize = size, AddedTotal = size };
+
+    private sealed class RecordingSink : IBookEventSink
+    {
+        public List<(long Price, long Qty)> Executions { get; } = new();
+
+        public void OnDepthChanged(Side side, long price, long displayed) { }
+
+        public void OnExecution(AggressorSide aggressor, long price, long qty) =>
+            Executions.Add((price, qty));
+    }
+
+    [Fact]
     public void Throughput_Is_Adequate_For_Live_Streaming()
     {
         var e = Engine(Nq);
