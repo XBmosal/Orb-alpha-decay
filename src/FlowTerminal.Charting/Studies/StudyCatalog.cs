@@ -44,6 +44,8 @@ public static class StudyCatalog
         // ── Volume & Profile ─────────────────────────────────────────────
         new StudyDefinition("Volume Profile (VBP)", "VBP", StudyCategory.VolumeAndProfile, StudyStatus.Active,
             "Total volume traded at each price over a session; locates high/low volume nodes.", DefaultOn: true),
+        new StudyDefinition("Volume (per bar)", "VOL", StudyCategory.VolumeAndProfile, StudyStatus.Active,
+            "Per-bar traded volume as a histogram along the bottom of the chart, colored by bar direction."),
         new StudyDefinition("Bid/Ask Cluster Profile", "BAC", StudyCategory.VolumeAndProfile, StudyStatus.EngineReady,
             "Splits horizontal volume into buying (ask) and selling (bid) segments at each price."),
         new StudyDefinition("Delta Profile", "DP", StudyCategory.VolumeAndProfile, StudyStatus.EngineReady,

@@ -121,6 +121,15 @@
                     </Border>
                 </Popup>
 
+                <Border DockPanel.Dock="Left" Style="{StaticResource VDividerStyle}" Height="20" />
+
+                <!-- Chart type -->
+                <Border DockPanel.Dock="Left" Background="{StaticResource SurfacePrimaryBrush}"
+                        BorderBrush="{StaticResource BorderSubtleBrush}" BorderThickness="1"
+                        CornerRadius="6" Padding="2" VerticalAlignment="Center">
+                    <StackPanel x:Name="ChartTypeBar" Orientation="Horizontal" />
+                </Border>
+
                 <!-- Connection status (right) -->
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
                     <Ellipse x:Name="ConnectionDot" Width="7" Height="7" Margin="0,0,7,0"
@@ -342,7 +351,7 @@
                 <TextBlock DockPanel.Dock="Left" x:Name="DiagnosticsText" Style="{StaticResource DiagnosticsStyle}"
                            VerticalAlignment="Center" Text="" />
 
-                <TextBlock DockPanel.Dock="Right" Text="v0.23.1" Style="{StaticResource TextMutedStyle}"
+                <TextBlock DockPanel.Dock="Right" Text="v0.24.0" Style="{StaticResource TextMutedStyle}"
                            VerticalAlignment="Center" Margin="12,0,0,0" />
                 <Border DockPanel.Dock="Right" Style="{StaticResource VDividerStyle}" Height="16" />
                 <TextBlock DockPanel.Dock="Right" x:Name="RithmicStatusText" Style="{StaticResource TextMutedStyle}"

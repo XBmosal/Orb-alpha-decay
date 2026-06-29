@@ -30,14 +30,25 @@ public sealed class SkiaChartHost : SKElement
     private const float TopPadding = 8f;
 
     private readonly CandlestickRenderer _renderer = new();
+    private readonly BarSeriesRenderer _barSeries = new();
     private readonly ChartOverlayRenderer _overlays = new();
     private readonly FootprintRenderer _footprint = new();
+    private readonly VolumeStripRenderer _volumeStrip = new();
+    private readonly PriceMarkerRenderer _priceMarker = new();
     private IReadOnlyList<Bar> _bars = Array.Empty<Bar>();
     private ChartOverlays _overlayData = ChartOverlays.Empty;
     private StudyState? _studies;
+    private ChartType _chartType = ChartType.Candles;
 
     /// <summary>Tick size for axis price labels (NQ/ES = 0.25). Set from the instrument spec.</summary>
     public decimal TickSize { get; set; } = 0.25m;
+
+    /// <summary>Price-series presentation (candles / bars / line). Footprint is a study.</summary>
+    public ChartType ChartType
+    {
+        get => _chartType;
+        set { _chartType = value; InvalidateVisual(); }
+    }
 
     /// <summary>Independent pan/zoom for one view (candles or footprint).</summary>
     private sealed class ViewState
@@ -220,10 +231,17 @@ public sealed class SkiaChartHost : SKElement
         }
         else
         {
-            _renderer.Render(canvas, viewport, _bars);
+            switch (_chartType)
+            {
+                case ChartType.Bars: _barSeries.RenderBars(canvas, viewport, _bars); break;
+                case ChartType.Line: _barSeries.RenderLine(canvas, viewport, _bars); break;
+                default: _renderer.Render(canvas, viewport, _bars); break;
+            }
+
             if (_studies is { Enabled.Count: > 0 } studies)
             {
                 _overlays.Render(canvas, viewport, _overlayData, studies.Enabled, profileBand);
+                if (studies.IsEnabled("VOL")) _volumeStrip.Render(canvas, viewport, _bars);
             }
         }
 
@@ -231,6 +249,13 @@ public sealed class SkiaChartHost : SKElement
 
         DrawPriceAxis(canvas, viewport, totalRight);
         DrawTimeAxis(canvas, viewport, first, visible, footprint);
+
+        // Current-price marker (latest close) in the right gutter, on top of the axis.
+        if (!footprint && _bars.Count > 0)
+        {
+            var last = _bars[^1];
+            _priceMarker.Render(canvas, viewport, last.CloseTicks, last.CloseTicks >= last.OpenTicks, TickSize, totalRight);
+        }
 
         if (view.Pan > 0)
         {

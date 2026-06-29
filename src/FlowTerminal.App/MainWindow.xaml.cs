@@ -62,6 +62,7 @@ public partial class MainWindow : Window
 
         CacheBrushes();
         BuildTimeframeBar();
+        BuildChartTypeBar();
         BuildIndicatorsMenu();
 
         Loaded += OnLoaded;
@@ -117,6 +118,50 @@ public partial class MainWindow : Window
 
         UpdateInstrumentTitle();
         await _feed.ChangeTimeframeAsync(interval);
+    }
+
+    // ── Chart type selector ─────────────────────────────────────────────────
+
+    private static readonly (string Label, Charting.ChartType Type)[] ChartTypes =
+    {
+        ("Candles", Charting.ChartType.Candles),
+        ("Bars", Charting.ChartType.Bars),
+        ("Line", Charting.ChartType.Line),
+    };
+
+    private readonly List<ToggleButton> _chartTypeButtons = new();
+
+    private void BuildChartTypeBar()
+    {
+        foreach (var (label, type) in ChartTypes)
+        {
+            var btn = new ToggleButton
+            {
+                Content = label,
+                Style = (Style)FindResource("SegmentedToggleStyle"),
+                Tag = type,
+                IsChecked = type == Chart.ChartType,
+            };
+
+            btn.Click += OnChartTypeClick;
+            _chartTypeButtons.Add(btn);
+            ChartTypeBar.Children.Add(btn);
+        }
+    }
+
+    private void OnChartTypeClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not ToggleButton clicked || clicked.Tag is not Charting.ChartType type)
+        {
+            return;
+        }
+
+        foreach (var b in _chartTypeButtons)
+        {
+            b.IsChecked = ReferenceEquals(b, clicked);
+        }
+
+        Chart.ChartType = type;
     }
 
     // ── Indicators menu (replaces the old checkbox list) ────────────────────
