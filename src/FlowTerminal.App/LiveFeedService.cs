@@ -60,7 +60,14 @@ public sealed class LiveFeedService : IAsyncDisposable
     private readonly List<FvgBox> _fvgs = new();
     private readonly TradingCalendar _calendar = new();
     private readonly List<Footprint> _barFootprints = new();
-    private readonly List<FootprintColumn> _footprintColumns = new(); // 1:1 with _completed
+    private readonly List<FootprintBar> _footprintColumns = new(); // 1:1 with _completed
+    private FootprintSettings _footprintSettings = FootprintSettings.Default;
+
+    /// <summary>Current footprint configuration (mode, imbalance ratios, thresholds…).</summary>
+    public FootprintSettings FootprintSettings => _footprintSettings;
+
+    /// <summary>Applies new footprint settings; the next snapshot rebuilds bars under them.</summary>
+    public void SetFootprintSettings(FootprintSettings settings) => _footprintSettings = settings.Validate();
     private readonly List<CvdBar> _cvdBars = new();                   // CVD OHLC per completed bar
     private long _cvdOpen, _cvdHigh, _cvdLow, _cvdClose;
     private bool _cvdHasDev;
@@ -113,6 +120,7 @@ public sealed class LiveFeedService : IAsyncDisposable
     {
         _contract = contract;
         _startPrice = DefaultStartPrice(contract.Root);
+        ApplyFootprintPreset(contract.Root);
         return StartFeedAsync();
     }
 
@@ -140,6 +148,7 @@ public sealed class LiveFeedService : IAsyncDisposable
             {
                 _contract = contract;
                 _startPrice = DefaultStartPrice(contract.Root);
+                ApplyFootprintPreset(contract.Root);
                 ResetSessionState();
             }
 
@@ -152,6 +161,11 @@ public sealed class LiveFeedService : IAsyncDisposable
     }
 
     private static decimal DefaultStartPrice(RootSymbol root) => root == RootSymbol.ES ? 5_000m : 20_000m;
+
+    /// <summary>Per-instrument footprint preset, preserving the user's current display mode.</summary>
+    private void ApplyFootprintPreset(RootSymbol root) =>
+        _footprintSettings = (root == RootSymbol.ES ? FootprintSettings.Es : FootprintSettings.Nq)
+            with { Mode = _footprintSettings.Mode };
 
     // ── Playback transport (pause / speed / restart) ────────────────────────
 
@@ -379,19 +393,11 @@ public sealed class LiveFeedService : IAsyncDisposable
         return ValueTask.CompletedTask;
     }
 
-    /// <summary>Projects a completed bar and its footprint into a render-ready column.</summary>
-    private static FootprintColumn BuildFootprintColumn(Bar bar, Footprint fp)
-    {
-        var cells = new List<FootprintCell>();
-        foreach (var lvl in fp.Levels())
-        {
-            // BidVolume = traded at bid (sells), AskVolume = traded at ask (buys).
-            cells.Add(new FootprintCell(lvl.PriceTicks, lvl.SellVolume, lvl.BuyVolume));
-        }
-
-        return new FootprintColumn(
-            bar.OpenTicks, bar.CloseTicks, bar.HighTicks, bar.LowTicks, cells, bar.StartUtc);
-    }
+    /// <summary>Projects a bar and its footprint into a fully-derived render-ready footprint bar.</summary>
+    private FootprintBar BuildFootprintBar(Bar bar, Footprint fp, bool isClosed) =>
+        FootprintAggregator.Build(
+            fp, bar.OpenTicks, bar.HighTicks, bar.LowTicks, bar.CloseTicks,
+            bar.StartUtc, bar.EndUtc, isClosed, _footprintSettings);
 
     /// <summary>
     /// Processes one canonical event into the analytics. When <paramref name="warmUp"/>
@@ -454,7 +460,7 @@ public sealed class LiveFeedService : IAsyncDisposable
                     _vwapByBar.Add(_multiVwap.Daily.VwapTicks);
                     var doneFootprint = _currentFootprint;
                     _barFootprints.Add(doneFootprint);
-                    _footprintColumns.Add(BuildFootprintColumn(completed, doneFootprint));
+                    _footprintColumns.Add(BuildFootprintBar(completed, doneFootprint, isClosed: true));
                     _currentFootprint = new Footprint();
 
                     // Close out this bar's CVD candle and re-open the next at the same level.
@@ -514,11 +520,11 @@ public sealed class LiveFeedService : IAsyncDisposable
             // Footprint columns for the whole buffer (aligned 1:1 with completed bars),
             // plus the developing bar, so the footprint view can pan/zoom like candles.
             // The completed columns are built once on bar close, so this is a cheap copy.
-            var footprint = new List<FootprintColumn>(_footprintColumns.Count + 1);
+            var footprint = new List<FootprintBar>(_footprintColumns.Count + 1);
             footprint.AddRange(_footprintColumns);
             if (_bars.HasDeveloping)
             {
-                footprint.Add(BuildFootprintColumn(_bars.Developing, _currentFootprint));
+                footprint.Add(BuildFootprintBar(_bars.Developing, _currentFootprint, isClosed: false));
             }
 
             // TPO rows (lettered brackets per price) over the session.

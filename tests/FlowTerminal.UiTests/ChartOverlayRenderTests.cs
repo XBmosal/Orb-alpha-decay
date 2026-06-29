@@ -1,7 +1,9 @@
+using FlowTerminal.Analytics.Footprints;
 using FlowTerminal.Analytics.PriceAction;
 using FlowTerminal.Analytics.Profiles;
 using FlowTerminal.Charting;
 using FlowTerminal.Charting.Overlays;
+using FlowTerminal.Domain.Events;
 using SkiaSharp;
 using Xunit;
 
@@ -9,6 +11,14 @@ namespace FlowTerminal.UiTests;
 
 public class ChartOverlayRenderTests
 {
+    private static IReadOnlyList<FootprintBar> OneFootprintBar(
+        System.Action<Footprint> feed, long o, long h, long l, long c)
+    {
+        var f = new Footprint();
+        feed(f);
+        return new[] { FootprintAggregator.Build(f, o, h, l, c, default, default, isClosed: true) };
+    }
+
     private static ChartViewport Viewport(int w = 300, int h = 300) =>
         new(w, h, minPriceTicks: 90, maxPriceTicks: 110, firstBarIndex: 0, visibleBarCount: 10,
             leftPadding: 0, rightAxisWidth: 0, topPadding: 0, bottomPadding: 0);
@@ -92,8 +102,11 @@ public class ChartOverlayRenderTests
     [Fact]
     public void Footprint_Renderer_Draws_Cells()
     {
-        var cells = new[] { new FootprintCell(100, BidVolume: 10, AskVolume: 80) };
-        var columns = new[] { new FootprintColumn(98, 102, 104, 96, cells) };
+        var columns = OneFootprintBar(f =>
+        {
+            f.AddAt(100, 10, AggressorSide.Sell); // bid
+            f.AddAt(100, 80, AggressorSide.Buy);  // ask
+        }, 98, 104, 96, 102);
         using var bmp = new SKBitmap(400, 200);
         using var canvas = new SKCanvas(bmp);
         canvas.Clear(SKColors.Black);
@@ -117,13 +130,14 @@ public class ChartOverlayRenderTests
         // numbers: the colored bid/ask cluster bars must still render so the chart is
         // never empty. Ask volume (buys) → green to the right of center; bid volume
         // (sells) → purple to the left.
-        var cells = new List<FootprintCell>();
-        for (long p = 100; p < 260; p++) // 160 price rows over 200px → ~1px rows, not legible
+        var columns = OneFootprintBar(f =>
         {
-            cells.Add(new FootprintCell(p, BidVolume: 90, AskVolume: 90));
-        }
-
-        var columns = new[] { new FootprintColumn(150, 210, 260, 100, cells) };
+            for (long p = 100; p < 260; p++) // 160 price rows over 200px → ~1px rows, not legible
+            {
+                f.AddAt(p, 90, AggressorSide.Sell); // bid
+                f.AddAt(p, 90, AggressorSide.Buy);  // ask
+            }
+        }, 150, 260, 100, 210);
         var vp = FootprintViewport(1, 100, 260);
         using var bmp = new SKBitmap(400, 200);
         using var canvas = new SKCanvas(bmp);
@@ -157,7 +171,7 @@ public class ChartOverlayRenderTests
         using var bmp = new SKBitmap(400, 200);
         using var canvas = new SKCanvas(bmp);
         canvas.Clear(SKColors.Black);
-        new FootprintRenderer().Render(canvas, FootprintViewport(1, 90, 110), Array.Empty<FootprintColumn>());
+        new FootprintRenderer().Render(canvas, FootprintViewport(1, 90, 110), Array.Empty<FootprintBar>());
 
         bool nonBlack = false;
         for (int x = 0; x < 400 && !nonBlack; x += 2)

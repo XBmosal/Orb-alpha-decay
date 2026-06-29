@@ -45,15 +45,64 @@ public sealed class Footprint
 {
     private readonly VolumeProfile _profile = new();
 
+    // Per-price trade metadata the volume profile does not carry: trade counts and
+    // the largest single prints (used by the footprint aggregator for trade-count mode,
+    // bar statistics and large-trade highlighting). Keyed by integer ticks.
+    private readonly Dictionary<long, int> _tradeCount = new();
+    private readonly Dictionary<long, int> _buyTradeCount = new();
+    private readonly Dictionary<long, int> _sellTradeCount = new();
+    private readonly Dictionary<long, long> _maxTrade = new();
+    private readonly Dictionary<long, long> _largestBuy = new();
+    private readonly Dictionary<long, long> _largestSell = new();
+
     public long TotalVolume => _profile.TotalVolume;
     public long BuyVolume => _profile.TotalBuyVolume;   // traded at ask
     public long SellVolume => _profile.TotalSellVolume; // traded at bid
+    public long UnknownVolume => _profile.TotalUnknownVolume;
     public long Delta => BuyVolume - SellVolume;
+    public int TradeCount { get; private set; }
 
-    public void AddTrade(in MarketEvent trade) => _profile.AddTrade(trade);
+    public void AddTrade(in MarketEvent trade)
+    {
+        if (trade.Type == MarketEventType.Trade && trade.Quantity > 0)
+        {
+            AddAt(trade.PriceTicks, trade.Quantity, trade.Aggressor);
+        }
+    }
 
-    public void AddAt(long priceTicks, long quantity, AggressorSide aggressor) =>
+    public void AddAt(long priceTicks, long quantity, AggressorSide aggressor)
+    {
+        if (quantity <= 0)
+        {
+            return;
+        }
+
         _profile.AddAt(priceTicks, quantity, aggressor);
+
+        TradeCount++;
+        _tradeCount[priceTicks] = _tradeCount.GetValueOrDefault(priceTicks) + 1;
+        if (quantity > _maxTrade.GetValueOrDefault(priceTicks)) _maxTrade[priceTicks] = quantity;
+
+        switch (aggressor)
+        {
+            case AggressorSide.Buy:
+                _buyTradeCount[priceTicks] = _buyTradeCount.GetValueOrDefault(priceTicks) + 1;
+                if (quantity > _largestBuy.GetValueOrDefault(priceTicks)) _largestBuy[priceTicks] = quantity;
+                break;
+            case AggressorSide.Sell:
+                _sellTradeCount[priceTicks] = _sellTradeCount.GetValueOrDefault(priceTicks) + 1;
+                if (quantity > _largestSell.GetValueOrDefault(priceTicks)) _largestSell[priceTicks] = quantity;
+                break;
+        }
+    }
+
+    public long UnknownVolumeAt(long priceTicks) => _profile.UnknownVolumeAt(priceTicks);
+    public int TradeCountAt(long priceTicks) => _tradeCount.GetValueOrDefault(priceTicks);
+    public int BuyTradeCountAt(long priceTicks) => _buyTradeCount.GetValueOrDefault(priceTicks);
+    public int SellTradeCountAt(long priceTicks) => _sellTradeCount.GetValueOrDefault(priceTicks);
+    public long MaxTradeSizeAt(long priceTicks) => _maxTrade.GetValueOrDefault(priceTicks);
+    public long LargestBuyTradeAt(long priceTicks) => _largestBuy.GetValueOrDefault(priceTicks);
+    public long LargestSellTradeAt(long priceTicks) => _largestSell.GetValueOrDefault(priceTicks);
 
     public long AskVolumeAt(long priceTicks) => _profile.BuyVolumeAt(priceTicks);
 
@@ -126,7 +175,17 @@ public sealed class Footprint
         return markers;
     }
 
-    public void Reset() => _profile.Reset();
+    public void Reset()
+    {
+        _profile.Reset();
+        _tradeCount.Clear();
+        _buyTradeCount.Clear();
+        _sellTradeCount.Clear();
+        _maxTrade.Clear();
+        _largestBuy.Clear();
+        _largestSell.Clear();
+        TradeCount = 0;
+    }
 
     private static bool Qualifies(long dominant, long compared, double ratio, long minVolume)
     {

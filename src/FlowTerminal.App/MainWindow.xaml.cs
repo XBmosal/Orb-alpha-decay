@@ -389,6 +389,36 @@ public partial class MainWindow : Window
         Chart.ChartType = type;
     }
 
+    // ── Footprint cell mode ─────────────────────────────────────────────────
+
+    private static readonly (FlowTerminal.Analytics.Footprints.FootprintMode Mode, string Label)[] FootprintModes =
+    {
+        (FlowTerminal.Analytics.Footprints.FootprintMode.BidAsk, "Bid×Ask"),
+        (FlowTerminal.Analytics.Footprints.FootprintMode.Delta, "Delta"),
+        (FlowTerminal.Analytics.Footprints.FootprintMode.TotalVolume, "Volume"),
+        (FlowTerminal.Analytics.Footprints.FootprintMode.BidOnly, "Bid"),
+        (FlowTerminal.Analytics.Footprints.FootprintMode.AskOnly, "Ask"),
+        (FlowTerminal.Analytics.Footprints.FootprintMode.DeltaPercent, "Delta %"),
+        (FlowTerminal.Analytics.Footprints.FootprintMode.TradeCount, "Trades"),
+        (FlowTerminal.Analytics.Footprints.FootprintMode.VolumeProfile, "Profile"),
+    };
+
+    private void SetFootprintMode(FlowTerminal.Analytics.Footprints.FootprintMode mode)
+    {
+        _feed.SetFootprintSettings(_feed.FootprintSettings with { Mode = mode });
+        string label = "Bid×Ask";
+        foreach (var (m, l) in FootprintModes) if (m == mode) label = l;
+        FootprintModeButton.Content = $"FP: {label}";
+    }
+
+    private void CycleFootprintMode()
+    {
+        var current = _feed.FootprintSettings.Mode;
+        int idx = 0;
+        for (int i = 0; i < FootprintModes.Length; i++) if (FootprintModes[i].Mode == current) idx = i;
+        SetFootprintMode(FootprintModes[(idx + 1) % FootprintModes.Length].Mode);
+    }
+
     // ── CVD display mode ────────────────────────────────────────────────────
 
     private enum CvdView { Number, Line, Candles }
@@ -559,6 +589,7 @@ public partial class MainWindow : Window
         UndoButton.Click += (_, _) => Chart.Undo();
         RedoButton.Click += (_, _) => Chart.Redo();
         AddIndicatorButton.Click += (_, _) => IndicatorsButton.IsChecked = true;
+        FootprintModeButton.Click += (_, _) => CycleFootprintMode();
 
         RestartButton.Click += async (_, _) => await _feed.RestartAsync();
 
@@ -675,7 +706,7 @@ public partial class MainWindow : Window
             (int)_feed.Timeframe.TotalMinutes,
             Chart.ChartType.ToString(),
             _cvdView.ToString(),
-            _studyState.Enabled.ToArray()));
+            _studyState.Enabled.ToArray()) { FootprintMode = _feed.FootprintSettings.Mode.ToString() });
         _templateStore.Save(_templates);
         TemplateNameBox.Text = string.Empty;
         BuildTemplatesMenu();
@@ -688,6 +719,9 @@ public partial class MainWindow : Window
 
         var enabled = new HashSet<string>(t.Indicators);
         foreach (var kv in _indicatorSetters) kv.Value(enabled.Contains(kv.Key));
+
+        if (Enum.TryParse<FlowTerminal.Analytics.Footprints.FootprintMode>(t.FootprintMode, out var fpMode))
+            SetFootprintMode(fpMode);
 
         await SelectTimeframeAsync(TimeSpan.FromMinutes(Math.Max(1, t.TimeframeMinutes)));
     }
@@ -722,6 +756,7 @@ public partial class MainWindow : Window
     private void OnRenderTick(object? sender, EventArgs e)
     {
         var snapshot = _feed.Snapshot();
+        Chart.FootprintSettings = _feed.FootprintSettings;
         Chart.UpdateFrame(snapshot.Bars, snapshot.Overlays);
         UpdateDom(snapshot);
 

@@ -13,7 +13,11 @@ public sealed record ChartTemplate(
     int TimeframeMinutes,
     string ChartType,
     string CvdView,
-    string[] Indicators);
+    string[] Indicators)
+{
+    /// <summary>Footprint cell mode (added in v0.37; older templates default to Bid×Ask).</summary>
+    public string FootprintMode { get; init; } = "BidAsk";
+}
 
 /// <summary>
 /// Loads and saves chart templates as JSON under the user's application-data folder.

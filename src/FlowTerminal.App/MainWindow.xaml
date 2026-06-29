@@ -174,6 +174,13 @@
 
                 <Border DockPanel.Dock="Left" Style="{StaticResource VDividerStyle}" Height="20" />
 
+                <!-- Footprint cell mode (active in the footprint study) -->
+                <Button x:Name="FootprintModeButton" DockPanel.Dock="Left" Style="{StaticResource IconButtonStyle}"
+                        Width="Auto" Padding="11,0" Content="FP: Bid×Ask"
+                        ToolTip="Footprint cell mode — click to cycle (enable the Footprint study to see it)" />
+
+                <Border DockPanel.Dock="Left" Style="{StaticResource VDividerStyle}" Height="20" />
+
                 <!-- Templates -->
                 <ToggleButton x:Name="TemplatesButton" DockPanel.Dock="Left" Style="{StaticResource ToolbarToggleStyle}"
                               VerticalAlignment="Center">
@@ -602,7 +609,7 @@
                 </StackPanel>
 
                 <!-- Connection + version -->
-                <TextBlock DockPanel.Dock="Right" Text="v0.36.0" Style="{StaticResource TextMutedStyle}"
+                <TextBlock DockPanel.Dock="Right" Text="v0.37.0" Style="{StaticResource TextMutedStyle}"
                            VerticalAlignment="Center" Margin="14,0,0,0" />
                 <Border DockPanel.Dock="Right" Style="{StaticResource VDividerStyle}" Height="18" />
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">

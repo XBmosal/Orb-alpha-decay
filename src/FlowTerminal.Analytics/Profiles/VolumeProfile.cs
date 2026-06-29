@@ -22,10 +22,12 @@ public sealed class VolumeProfile
 {
     private readonly Dictionary<long, long> _buy = new();
     private readonly Dictionary<long, long> _sell = new();
+    private readonly Dictionary<long, long> _unknown = new();
 
     public long TotalVolume { get; private set; }
     public long TotalBuyVolume { get; private set; }
     public long TotalSellVolume { get; private set; }
+    public long TotalUnknownVolume { get; private set; }
 
     public void AddTrade(in MarketEvent trade)
     {
@@ -56,12 +58,17 @@ public sealed class VolumeProfile
                 TotalSellVolume += quantity;
                 break;
             default:
-                // Unknown aggressor: count toward total volume only (split evenly is
-                // avoided to keep delta honest). Store as buy/sell-neutral.
-                _buy.TryAdd(priceTicks, _buy.GetValueOrDefault(priceTicks));
+                // Unknown aggressor: tracked in its own bucket so it counts toward total
+                // and per-price volume without biasing buy/sell delta. (Previously this
+                // polluted the buy map with a phantom zero entry.)
+                _unknown[priceTicks] = _unknown.GetValueOrDefault(priceTicks) + quantity;
+                TotalUnknownVolume += quantity;
                 break;
         }
     }
+
+    /// <summary>Unknown-aggressor (unclassified) volume at a price.</summary>
+    public long UnknownVolumeAt(long priceTicks) => _unknown.GetValueOrDefault(priceTicks);
 
     /// <summary>Aggressive-buy (traded-at-ask) volume at a price.</summary>
     public long BuyVolumeAt(long priceTicks) => _buy.GetValueOrDefault(priceTicks);
@@ -70,7 +77,7 @@ public sealed class VolumeProfile
     public long SellVolumeAt(long priceTicks) => _sell.GetValueOrDefault(priceTicks);
 
     public long VolumeAt(long priceTicks) =>
-        _buy.GetValueOrDefault(priceTicks) + _sell.GetValueOrDefault(priceTicks);
+        _buy.GetValueOrDefault(priceTicks) + _sell.GetValueOrDefault(priceTicks) + _unknown.GetValueOrDefault(priceTicks);
 
     public long DeltaAt(long priceTicks) =>
         _buy.GetValueOrDefault(priceTicks) - _sell.GetValueOrDefault(priceTicks);
@@ -159,6 +166,7 @@ public sealed class VolumeProfile
     {
         _buy.Clear();
         _sell.Clear();
-        TotalVolume = TotalBuyVolume = TotalSellVolume = 0;
+        _unknown.Clear();
+        TotalVolume = TotalBuyVolume = TotalSellVolume = TotalUnknownVolume = 0;
     }
 }

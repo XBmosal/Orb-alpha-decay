@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Input;
 using FlowTerminal.Analytics.Bars;
+using FlowTerminal.Analytics.Footprints;
 using FlowTerminal.Charting;
 using FlowTerminal.Charting.Drawings;
 using FlowTerminal.Charting.Overlays;
@@ -53,6 +54,9 @@ public sealed class SkiaChartHost : SKElement
 
     /// <summary>The active drawing tool. <see cref="DrawingTool.Select"/> pans/zooms.</summary>
     public DrawingTool ActiveTool { get; set; } = DrawingTool.Select;
+
+    /// <summary>Footprint display configuration (mode, imbalance, POC…). Drives the footprint renderer.</summary>
+    public FootprintSettings FootprintSettings { get; set; } = FootprintSettings.Default;
 
     /// <summary>Removes every drawing from the chart.</summary>
     public void ClearDrawings()
@@ -403,7 +407,7 @@ public sealed class SkiaChartHost : SKElement
         canvas.ClipRect(plot);
         if (footprint)
         {
-            _footprint.Render(canvas, viewport, _overlayData.Footprint, TickSize);
+            _footprint.Render(canvas, viewport, _overlayData.Footprint, FootprintSettings, TickSize);
         }
         else
         {
