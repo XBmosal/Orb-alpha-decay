@@ -71,6 +71,7 @@ public partial class MainWindow : Window
         BuildTapeFilters();
         BuildCvdModeBar();
         BuildInstrumentMenu();
+        BuildDrawingToolbar();
         BuildIndicatorsMenu();
 
         Loaded += OnLoaded;
@@ -129,6 +130,66 @@ public partial class MainWindow : Window
 
         UpdateInstrumentTitle();
         await _feed.ChangeTimeframeAsync(interval);
+    }
+
+    // ── Drawing toolbar ─────────────────────────────────────────────────────
+
+    private readonly List<ToggleButton> _toolButtons = new();
+
+    private void BuildDrawingToolbar()
+    {
+        var tools = new (string Glyph, string Tip, Charting.Drawings.DrawingTool Tool)[]
+        {
+            ("⌖", "Cursor — pan & zoom", Charting.Drawings.DrawingTool.Select),
+            ("╱", "Trend line", Charting.Drawings.DrawingTool.Trendline),
+            ("─", "Horizontal line", Charting.Drawings.DrawingTool.HorizontalLine),
+            ("→", "Ray", Charting.Drawings.DrawingTool.Ray),
+            ("▢", "Rectangle", Charting.Drawings.DrawingTool.Rectangle),
+            ("F", "Fibonacci retracement", Charting.Drawings.DrawingTool.Fibonacci),
+            ("M", "Measure", Charting.Drawings.DrawingTool.Measure),
+            ("⌫", "Erase a drawing", Charting.Drawings.DrawingTool.Erase),
+        };
+
+        foreach (var (glyph, tip, tool) in tools)
+        {
+            var btn = new ToggleButton
+            {
+                Content = glyph,
+                Style = (Style)FindResource("IconToggleStyle"),
+                Tag = tool,
+                ToolTip = tip,
+                IsChecked = tool == Charting.Drawings.DrawingTool.Select,
+                Margin = new Thickness(0, 0, 0, 3),
+            };
+            btn.Click += OnToolClick;
+            _toolButtons.Add(btn);
+            DrawingToolbar.Children.Add(btn);
+        }
+
+        // Separator + clear-all.
+        DrawingToolbar.Children.Add(new Border
+        {
+            Height = 1,
+            Background = (Brush)FindResource("BorderSubtleBrush"),
+            Margin = new Thickness(3, 4, 3, 5),
+        });
+
+        var clear = new Button
+        {
+            Content = "✕",
+            Style = (Style)FindResource("IconButtonStyle"),
+            ToolTip = "Clear all drawings",
+            Foreground = _secondaryBrush,
+        };
+        clear.Click += (_, _) => Chart.ClearDrawings();
+        DrawingToolbar.Children.Add(clear);
+    }
+
+    private void OnToolClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not ToggleButton clicked || clicked.Tag is not Charting.Drawings.DrawingTool tool) return;
+        foreach (var b in _toolButtons) b.IsChecked = ReferenceEquals(b, clicked);
+        Chart.ActiveTool = tool;
     }
 
     // ── Instrument / contract selectors ─────────────────────────────────────

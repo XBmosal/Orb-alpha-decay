@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Input;
 using FlowTerminal.Analytics.Bars;
 using FlowTerminal.Charting;
+using FlowTerminal.Charting.Drawings;
 using FlowTerminal.Charting.Overlays;
 using SkiaSharp;
 using SkiaSharp.Views.Desktop;
@@ -35,10 +36,26 @@ public sealed class SkiaChartHost : SKElement
     private readonly FootprintRenderer _footprint = new();
     private readonly VolumeStripRenderer _volumeStrip = new();
     private readonly PriceMarkerRenderer _priceMarker = new();
+    private readonly DrawingRenderer _drawingRenderer = new();
+    private readonly List<ChartDrawing> _drawings = new();
+    private ChartDrawing? _pending;
+    private bool _drawing;
+    private ChartViewport? _lastViewport;
     private IReadOnlyList<Bar> _bars = Array.Empty<Bar>();
     private ChartOverlays _overlayData = ChartOverlays.Empty;
     private StudyState? _studies;
     private ChartType _chartType = ChartType.Candles;
+
+    /// <summary>The active drawing tool. <see cref="DrawingTool.Select"/> pans/zooms.</summary>
+    public DrawingTool ActiveTool { get; set; } = DrawingTool.Select;
+
+    /// <summary>Removes every drawing from the chart.</summary>
+    public void ClearDrawings()
+    {
+        _drawings.Clear();
+        _pending = null;
+        InvalidateVisual();
+    }
 
     /// <summary>Tick size for axis price labels (NQ/ES = 0.25). Set from the instrument spec.</summary>
     public decimal TickSize { get; set; } = 0.25m;
@@ -102,7 +119,30 @@ public sealed class SkiaChartHost : SKElement
     {
         base.OnMouseLeftButtonDown(e);
         _dragStart = e.GetPosition(this);
-        _drag = RegionAt(_dragStart);
+        var region = RegionAt(_dragStart);
+
+        // A drawing tool takes over clicks inside the plot; the axes always zoom.
+        if (region == DragMode.Pan && ActiveTool != DrawingTool.Select && !FootprintMode
+            && _lastViewport is not null && _bars.Count > 0)
+        {
+            if (ActiveTool == DrawingTool.Erase)
+            {
+                EraseAt(_dragStart);
+            }
+            else
+            {
+                var anchor = PixelToAnchor(_dragStart);
+                _pending = new ChartDrawing(ActiveTool, anchor, anchor);
+                _drawing = true;
+            }
+
+            CaptureMouse();
+            InvalidateVisual();
+            e.Handled = true;
+            return;
+        }
+
+        _drag = region;
         var view = View;
         _dragStartPan = view.Pan;
         _dragStartVisible = view.Visible;
@@ -114,6 +154,14 @@ public sealed class SkiaChartHost : SKElement
     protected override void OnMouseMove(MouseEventArgs e)
     {
         base.OnMouseMove(e);
+
+        if (_drawing && _pending is not null && _lastViewport is not null)
+        {
+            _pending.B = PixelToAnchor(e.GetPosition(this));
+            InvalidateVisual();
+            return;
+        }
+
         if (_drag == DragMode.None)
         {
             return;
@@ -157,12 +205,93 @@ public sealed class SkiaChartHost : SKElement
     protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e)
     {
         base.OnMouseLeftButtonUp(e);
+
+        if (_drawing)
+        {
+            _drawing = false;
+            ReleaseMouseCapture();
+            if (_pending is not null)
+            {
+                _drawings.Add(_pending);
+                _pending = null;
+            }
+
+            InvalidateVisual();
+            e.Handled = true;
+            return;
+        }
+
         if (_drag != DragMode.None)
         {
             _drag = DragMode.None;
             ReleaseMouseCapture();
             e.Handled = true;
         }
+    }
+
+    // ── Drawing data↔pixel mapping ──────────────────────────────────────────
+
+    private AnchorPoint PixelToAnchor(Point p)
+    {
+        var vp = _lastViewport!;
+        double slot = (p.X - vp.PlotLeft) / Math.Max(1e-3, vp.BarSlotWidth);
+        int idx = Math.Clamp(vp.FirstBarIndex + (int)Math.Round(slot - 0.5), 0, _bars.Count - 1);
+        return new AnchorPoint(_bars[idx].StartUtc, vp.YToPrice((float)p.Y));
+    }
+
+    private float TimeToX(ChartViewport vp, DateTime t) => vp.BarCenterX(NearestBarByTime(t));
+
+    private int NearestBarByTime(DateTime t)
+    {
+        if (_bars.Count == 0) return 0;
+        if (t <= _bars[0].StartUtc) return 0;
+        if (t >= _bars[^1].StartUtc) return _bars.Count - 1;
+
+        int lo = 0, hi = _bars.Count - 1;
+        while (lo <= hi)
+        {
+            int mid = (lo + hi) / 2;
+            var bt = _bars[mid].StartUtc;
+            if (bt < t) lo = mid + 1;
+            else if (bt > t) hi = mid - 1;
+            else return mid;
+        }
+
+        int a = Math.Clamp(lo, 0, _bars.Count - 1);
+        int b = Math.Clamp(lo - 1, 0, _bars.Count - 1);
+        return Math.Abs((_bars[a].StartUtc - t).Ticks) < Math.Abs((_bars[b].StartUtc - t).Ticks) ? a : b;
+    }
+
+    private void EraseAt(Point p)
+    {
+        var vp = _lastViewport!;
+        float best = 8f;
+        int hit = -1;
+        for (int i = 0; i < _drawings.Count; i++)
+        {
+            float d = DistanceTo(_drawings[i], vp, (float)p.X, (float)p.Y);
+            if (d < best) { best = d; hit = i; }
+        }
+
+        if (hit >= 0) _drawings.RemoveAt(hit);
+    }
+
+    private float DistanceTo(ChartDrawing d, ChartViewport vp, float px, float py)
+    {
+        float xa = TimeToX(vp, d.A.Time), ya = vp.PriceToY(d.A.PriceTicks);
+        float xb = TimeToX(vp, d.B.Time), yb = vp.PriceToY(d.B.PriceTicks);
+        if (d.Tool == DrawingTool.HorizontalLine) return Math.Abs(py - ya);
+        if (d.Tool == DrawingTool.Ray) { xb = vp.PlotRight; if (TimeToX(vp, d.B.Time) != xa) yb = ya + (yb - ya) * (xb - xa) / (TimeToX(vp, d.B.Time) - xa); }
+        return DistToSegment(px, py, xa, ya, xb, yb);
+    }
+
+    private static float DistToSegment(float px, float py, float ax, float ay, float bx, float by)
+    {
+        float dx = bx - ax, dy = by - ay;
+        float len2 = dx * dx + dy * dy;
+        float t = len2 <= 0 ? 0 : Math.Clamp(((px - ax) * dx + (py - ay) * dy) / len2, 0, 1);
+        float cx = ax + t * dx, cy = ay + t * dy;
+        return MathF.Sqrt((px - cx) * (px - cx) + (py - cy) * (py - cy));
     }
 
     // ── Rendering ───────────────────────────────────────────────────────────
@@ -257,10 +386,23 @@ public sealed class SkiaChartHost : SKElement
             _priceMarker.Render(canvas, viewport, last.CloseTicks, last.CloseTicks >= last.OpenTicks, TickSize, totalRight);
         }
 
+        // User drawings (candle/bars/line view only), clipped to the plot.
+        if (!footprint && (_drawings.Count > 0 || _pending is not null))
+        {
+            canvas.Save();
+            canvas.ClipRect(plot);
+            float TimeMap(DateTime t) => TimeToX(viewport, t);
+            foreach (var d in _drawings) _drawingRenderer.Render(canvas, viewport, d, TimeMap, TickSize);
+            if (_pending is not null) _drawingRenderer.Render(canvas, viewport, _pending, TimeMap, TickSize, preview: true);
+            canvas.Restore();
+        }
+
         if (view.Pan > 0)
         {
             DrawHistoryBadge(canvas, viewport.PlotRight);
         }
+
+        _lastViewport = viewport; // cache for drawing mouse-mapping
     }
 
     private void DrawPriceAxis(SKCanvas canvas, ChartViewport vp, float axisX)

@@ -205,7 +205,11 @@
                                            Text="drag to pan · drag price/time axes to zoom" />
                             </DockPanel>
                         </Border>
-                        <Border Background="{StaticResource AppBackgroundBrush}" CornerRadius="0,0,6,6" ClipToBounds="True">
+                        <Border DockPanel.Dock="Left" Background="{StaticResource SurfaceSecondaryBrush}"
+                                BorderBrush="{StaticResource BorderSubtleBrush}" BorderThickness="0,0,1,0" Width="38">
+                            <StackPanel x:Name="DrawingToolbar" Orientation="Vertical" Margin="5,6" />
+                        </Border>
+                        <Border Background="{StaticResource AppBackgroundBrush}" CornerRadius="0,0,6,0" ClipToBounds="True">
                             <controls:SkiaChartHost x:Name="Chart" />
                         </Border>
                     </DockPanel>
@@ -520,7 +524,7 @@
                 </StackPanel>
 
                 <!-- Connection + version -->
-                <TextBlock DockPanel.Dock="Right" Text="v0.26.0" Style="{StaticResource TextMutedStyle}"
+                <TextBlock DockPanel.Dock="Right" Text="v0.27.0" Style="{StaticResource TextMutedStyle}"
                            VerticalAlignment="Center" Margin="14,0,0,0" />
                 <Border DockPanel.Dock="Right" Style="{StaticResource VDividerStyle}" Height="18" />
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
