@@ -69,6 +69,7 @@ public partial class MainWindow : Window
         _renderTimer.Tick += OnRenderTick;
 
         CacheBrushes();
+        BuildWorkspaceTabs();
         BuildTimeframeBar();
         BuildChartTypeBar();
         BuildTapeFilters();
@@ -300,6 +301,38 @@ public partial class MainWindow : Window
         UpdateInstrumentTitle();
         BuildContractMenu();
         await _feed.ChangeContractAsync(contract);
+    }
+
+    // ── Workspace tabs (Chart / Heatmap) ────────────────────────────────────
+
+    private readonly List<ToggleButton> _workspaceTabs = new();
+
+    private void BuildWorkspaceTabs()
+    {
+        foreach (var (label, isChart) in new[] { ("Chart", true), ("Heatmap", false) })
+        {
+            var btn = new ToggleButton
+            {
+                Content = label,
+                Style = (Style)FindResource("SegmentedToggleStyle"),
+                Tag = isChart,
+                IsChecked = isChart,
+                MinWidth = 78,
+                Height = 28,
+                Margin = new Thickness(0, 0, 4, 0),
+            };
+            btn.Click += OnWorkspaceTabClick;
+            _workspaceTabs.Add(btn);
+            WorkspaceTabs.Children.Add(btn);
+        }
+    }
+
+    private void OnWorkspaceTabClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not ToggleButton clicked || clicked.Tag is not bool isChart) return;
+        foreach (var b in _workspaceTabs) b.IsChecked = ReferenceEquals(b, clicked);
+        ChartWorkspace.Visibility = isChart ? Visibility.Visible : Visibility.Collapsed;
+        HeatmapWorkspace.Visibility = isChart ? Visibility.Collapsed : Visibility.Visible;
     }
 
     // ── Chart type selector ─────────────────────────────────────────────────

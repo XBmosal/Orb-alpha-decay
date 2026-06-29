@@ -27,6 +27,6 @@ public sealed class HeatmapHost : SKElement
             return;
         }
 
-        _feed.RenderHeatmap(canvas, new SkiaSharp.SKRect(0, 0, e.Info.Width, e.Info.Height));
+        _feed.RenderBookmap(canvas, new SkiaSharp.SKRect(0, 0, e.Info.Width, e.Info.Height));
     }
 }

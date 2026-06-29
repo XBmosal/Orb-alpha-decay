@@ -78,6 +78,9 @@ public sealed class LiveFeedService : IAsyncDisposable
 
     private LiquidityHeatmap _heatmap = new(TimeSpan.FromMilliseconds(250));
     private readonly HeatmapRenderer _heatmapRenderer = new();
+    private readonly BookmapRenderer _bookmapRenderer = new();
+    private readonly List<TradeDot> _tradeDots = new(); // recent executions for heatmap bubbles
+    private long _lastTradeTicks;
     private readonly DetectorEngine _detectors = new(RootSymbol.NQ);
     private readonly PipelineDiagnostics _diagnostics = new();
 
@@ -301,6 +304,8 @@ public sealed class LiveFeedService : IAsyncDisposable
         _barsEvicted = 0;
         _lastWarmPriceTicks = 0;
         _heatmap = new LiquidityHeatmap(TimeSpan.FromMilliseconds(250));
+        _tradeDots.Clear();
+        _lastTradeTicks = 0;
     }
 
     /// <summary>
@@ -411,6 +416,14 @@ public sealed class LiveFeedService : IAsyncDisposable
                 _cvdLow = Math.Min(_cvdLow, cvdNow);
                 _cvdClose = cvdNow;
                 _tape.Add(e);
+
+                // Live executions feed the heatmap trade bubbles (skip warm history).
+                if (!warmUp)
+                {
+                    _lastTradeTicks = e.PriceTicks;
+                    _tradeDots.Add(new TradeDot(e.ExchangeTimestampUtc, e.PriceTicks, e.Quantity, e.Aggressor == AggressorSide.Buy));
+                    if (_tradeDots.Count > 8000) _tradeDots.RemoveRange(0, _tradeDots.Count - 8000);
+                }
                 _multiVwap.AddTrade(e.PriceTicks, e.Quantity, _calendar.TradingDate(e.ExchangeTimestampUtc));
                 _currentFootprint.AddTrade(e);
                 _tpo ??= new TpoProfile(e.ExchangeTimestampUtc);
@@ -554,6 +567,37 @@ public sealed class LiveFeedService : IAsyncDisposable
             const long window = 60; // ticks above/below mid
             _heatmapRenderer.Render(canvas, bounds, _heatmap, mid - window, mid + window, HeatmapScale.Percentile);
         }
+    }
+
+    /// <summary>Renders the full Bookmap-style liquidity view (heatmap + bubbles + axes).</summary>
+    public void RenderBookmap(SKCanvas canvas, SKRect bounds)
+    {
+        lock (_lock)
+        {
+            long bid = _book.BestBidTicks;
+            long ask = _book.BestAskTicks;
+            long mid = bid != BookSide.NoPrice && ask != BookSide.NoPrice ? (bid + ask) / 2
+                : _lastTradeTicks > 0 ? _lastTradeTicks : 80_000;
+            var (lo, hi) = HeatmapWindow(mid);
+            decimal tick = _contract?.Spec.TickSize ?? 0.25m;
+            _bookmapRenderer.Render(canvas, bounds, _heatmap, _tradeDots, bid, ask, _lastTradeTicks, lo, hi, tick);
+        }
+    }
+
+    /// <summary>Frames the price window to the recent active liquidity (with padding).</summary>
+    private (long Lo, long Hi) HeatmapWindow(long mid)
+    {
+        long lo = long.MaxValue, hi = long.MinValue;
+        var cols = _heatmap.Columns;
+        for (int i = Math.Max(0, cols.Count - 80); i < cols.Count; i++)
+        {
+            foreach (var k in cols[i].Bid.Keys) { lo = Math.Min(lo, k); hi = Math.Max(hi, k); }
+            foreach (var k in cols[i].Ask.Keys) { lo = Math.Min(lo, k); hi = Math.Max(hi, k); }
+        }
+
+        if (lo > hi) { lo = mid - 80; hi = mid + 80; }
+        long pad = Math.Max(4, (hi - lo) / 12);
+        return (lo - pad, hi + pad);
     }
 
     public async ValueTask DisposeAsync()

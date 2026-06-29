@@ -13,9 +13,15 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />   <!-- 0 Command bar -->
             <RowDefinition Height="Auto" />   <!-- 1 Toolbar -->
-            <RowDefinition Height="*" MinHeight="320" /> <!-- 2 Main workspace -->
-            <RowDefinition Height="Auto" />   <!-- 3 Footer -->
+            <RowDefinition Height="Auto" />   <!-- 2 Workspace tabs -->
+            <RowDefinition Height="*" MinHeight="320" /> <!-- 3 Main workspace -->
+            <RowDefinition Height="Auto" />   <!-- 4 Footer -->
         </Grid.RowDefinitions>
+
+        <!-- ════════════════════════════ WORKSPACE TABS ════════════════════════════ -->
+        <Border Grid.Row="2" Background="{StaticResource WorkspaceBrush}" Padding="8,5,8,0">
+            <StackPanel x:Name="WorkspaceTabs" Orientation="Horizontal" />
+        </Border>
 
         <!-- ════════════════════════════ COMMAND BAR ════════════════════════════ -->
         <Border Grid.Row="0" Background="{StaticResource SurfacePrimaryBrush}"
@@ -237,8 +243,8 @@
             </DockPanel>
         </Border>
 
-        <!-- ════════════════════════════ MAIN WORKSPACE ════════════════════════════ -->
-        <Grid Grid.Row="2" Margin="8">
+        <!-- ════════════════════════════ CHART WORKSPACE ════════════════════════════ -->
+        <Grid x:Name="ChartWorkspace" Grid.Row="3" Margin="8">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" MinWidth="520" />
                 <ColumnDefinition Width="8" />
@@ -279,16 +285,8 @@
                 <GridSplitter Grid.Row="1" Height="8" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
                               ResizeBehavior="PreviousAndNext" ResizeDirection="Rows" />
 
-                <!-- Lower analytics -->
-                <Grid Grid.Row="2">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="300" MinWidth="180" />
-                        <ColumnDefinition Width="8" />
-                        <ColumnDefinition Width="*" MinWidth="220" />
-                    </Grid.ColumnDefinitions>
-
-                    <!-- CVD -->
-                    <Border Grid.Column="0" Style="{StaticResource PanelSurfaceStyle}">
+                <!-- Lower analytics: CVD (heatmap now lives in its own workspace tab) -->
+                <Border Grid.Row="2" Style="{StaticResource PanelSurfaceStyle}">
                         <DockPanel>
                             <Border DockPanel.Dock="Top" Style="{StaticResource PanelHeaderBarStyle}">
                                 <DockPanel LastChildFill="False">
@@ -324,30 +322,6 @@
                             </Grid>
                         </DockPanel>
                     </Border>
-
-                    <GridSplitter Grid.Column="1" Width="8" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" />
-
-                    <!-- Liquidity heatmap -->
-                    <Border Grid.Column="2" Style="{StaticResource PanelSurfaceStyle}">
-                        <DockPanel>
-                            <Border DockPanel.Dock="Top" Style="{StaticResource PanelHeaderBarStyle}">
-                                <DockPanel LastChildFill="False">
-                                    <TextBlock DockPanel.Dock="Left" Text="Liquidity Heatmap"
-                                               Style="{StaticResource PanelTitleStyle}" />
-                                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
-                                        <Ellipse Width="6" Height="6" Margin="0,0,5,0" VerticalAlignment="Center" Fill="{StaticResource BidBrush}" />
-                                        <TextBlock Text="BID" Style="{StaticResource OverlineStyle}" Margin="0,0,10,0" />
-                                        <Ellipse Width="6" Height="6" Margin="0,0,5,0" VerticalAlignment="Center" Fill="{StaticResource AskBrush}" />
-                                        <TextBlock Text="ASK" Style="{StaticResource OverlineStyle}" />
-                                    </StackPanel>
-                                </DockPanel>
-                            </Border>
-                            <Border Background="{StaticResource AppBackgroundBrush}" CornerRadius="0,0,6,6" ClipToBounds="True">
-                                <controls:HeatmapHost x:Name="Heatmap" />
-                            </Border>
-                        </DockPanel>
-                    </Border>
-                </Grid>
             </Grid>
 
             <GridSplitter Grid.Column="1" Width="8" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" />
@@ -541,8 +515,32 @@
             </Grid>
         </Grid>
 
+        <!-- ════════════════════════════ HEATMAP WORKSPACE ════════════════════════════ -->
+        <Border x:Name="HeatmapWorkspace" Grid.Row="3" Margin="8" Visibility="Collapsed"
+                Style="{StaticResource PanelSurfaceStyle}">
+            <DockPanel>
+                <Border DockPanel.Dock="Top" Style="{StaticResource PanelHeaderBarStyle}">
+                    <DockPanel LastChildFill="False">
+                        <TextBlock DockPanel.Dock="Left" Text="Liquidity Heatmap" Style="{StaticResource PanelTitleStyle}"
+                                   Foreground="{StaticResource TextPrimaryBrush}" />
+                        <TextBlock DockPanel.Dock="Left" Text="BOOKMAP" Style="{StaticResource OverlineStyle}"
+                                   Margin="8,0,0,0" VerticalAlignment="Center" />
+                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Ellipse Width="6" Height="6" Margin="0,0,5,0" VerticalAlignment="Center" Fill="{StaticResource BullishBrush}" />
+                            <TextBlock Text="BID LIQUIDITY · BUYS" Style="{StaticResource OverlineStyle}" Margin="0,0,12,0" />
+                            <Ellipse Width="6" Height="6" Margin="0,0,5,0" VerticalAlignment="Center" Fill="{StaticResource BearishBrush}" />
+                            <TextBlock Text="ASK LIQUIDITY · SELLS" Style="{StaticResource OverlineStyle}" />
+                        </StackPanel>
+                    </DockPanel>
+                </Border>
+                <Border Background="{StaticResource AppBackgroundBrush}" CornerRadius="0,0,6,6" ClipToBounds="True">
+                    <controls:HeatmapHost x:Name="Heatmap" />
+                </Border>
+            </DockPanel>
+        </Border>
+
         <!-- ════════════════════════════ FOOTER ════════════════════════════ -->
-        <Border Grid.Row="3" Background="{StaticResource SurfacePrimaryBrush}"
+        <Border Grid.Row="4" Background="{StaticResource SurfacePrimaryBrush}"
                 BorderBrush="{StaticResource BorderSubtleBrush}" BorderThickness="0,1,0,0">
             <DockPanel LastChildFill="False" Margin="14,6">
 
@@ -585,7 +583,7 @@
                 </StackPanel>
 
                 <!-- Connection + version -->
-                <TextBlock DockPanel.Dock="Right" Text="v0.29.0" Style="{StaticResource TextMutedStyle}"
+                <TextBlock DockPanel.Dock="Right" Text="v0.30.0" Style="{StaticResource TextMutedStyle}"
                            VerticalAlignment="Center" Margin="14,0,0,0" />
                 <Border DockPanel.Dock="Right" Style="{StaticResource VDividerStyle}" Height="18" />
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
