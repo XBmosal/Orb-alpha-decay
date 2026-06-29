@@ -28,6 +28,8 @@ public partial class MainWindow : Window
     private readonly DispatcherTimer _renderTimer;
     private Contract? _contract;
     private readonly List<ToggleButton> _timeframeButtons = new();
+    private long _lastEvents;
+    private DateTime _lastRateTime = DateTime.UtcNow;
 
     // Cached brushes (resolved once) so the per-frame tape rows don't hit FindResource.
     private Brush _buyBrush = Brushes.LimeGreen;
@@ -68,6 +70,7 @@ public partial class MainWindow : Window
         BuildChartTypeBar();
         BuildTapeFilters();
         BuildCvdModeBar();
+        BuildInstrumentMenu();
         BuildIndicatorsMenu();
 
         Loaded += OnLoaded;
@@ -126,6 +129,104 @@ public partial class MainWindow : Window
 
         UpdateInstrumentTitle();
         await _feed.ChangeTimeframeAsync(interval);
+    }
+
+    // ── Instrument / contract selectors ─────────────────────────────────────
+
+    private readonly ContractCalendar _calendar = new();
+
+    private void BuildInstrumentMenu()
+    {
+        foreach (var spec in InstrumentRegistry.All)
+        {
+            var root = spec.Root;
+            InstrumentMenu.Children.Add(BuildMenuRow(
+                $"{spec.RootSymbol}  —  {spec.Description}",
+                current: _contract?.Root == root,
+                onClick: async () =>
+                {
+                    InstrumentButton.IsChecked = false;
+                    var active = _calendar.SuggestActive(root, DateOnly.FromDateTime(DateTime.UtcNow));
+                    await SwitchContractAsync(active);
+                }));
+        }
+    }
+
+    private void BuildContractMenu()
+    {
+        ContractMenu.Children.Clear();
+        if (_contract is null) return;
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var contracts = _calendar.Enumerate(_contract.Root, today.Year, today.Year + 1)
+            .Where(c => c.ExpirationDateUtc >= today)
+            .Take(5);
+
+        foreach (var c in contracts)
+        {
+            var pick = c;
+            ContractMenu.Children.Add(BuildMenuRow(
+                FriendlyContract(c),
+                current: c.FullSymbol == _contract.FullSymbol,
+                onClick: async () =>
+                {
+                    ContractButton.IsChecked = false;
+                    await SwitchContractAsync(pick);
+                }));
+        }
+    }
+
+    private FrameworkElement BuildMenuRow(string text, bool current, Func<Task> onClick)
+    {
+        var dock = new DockPanel { LastChildFill = true };
+        var check = new TextBlock
+        {
+            Text = current ? "✓" : string.Empty,
+            Foreground = _buyBrush,
+            FontWeight = FontWeights.Bold,
+            Width = 16,
+            TextAlignment = TextAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        DockPanel.SetDock(check, Dock.Right);
+        dock.Children.Add(check);
+        dock.Children.Add(new TextBlock
+        {
+            Text = text,
+            Foreground = _secondaryBrush,
+            VerticalAlignment = VerticalAlignment.Center,
+        });
+
+        var row = new Border
+        {
+            Padding = new Thickness(10, 6, 8, 6),
+            CornerRadius = new CornerRadius(5),
+            Background = Brushes.Transparent,
+            Cursor = Cursors.Hand,
+            Child = dock,
+        };
+        row.MouseEnter += (_, _) => row.Background = (Brush)FindResource("SurfaceHoverBrush");
+        row.MouseLeave += (_, _) => row.Background = Brushes.Transparent;
+        row.MouseLeftButtonUp += async (_, _) => await onClick();
+        return row;
+    }
+
+    private static string FriendlyContract(Contract c)
+    {
+        string month = new DateTime(c.Year, c.Month.CalendarMonth(), 1)
+            .ToString("MMM", CultureInfo.InvariantCulture).ToUpperInvariant();
+        return $"{c.Spec.RootSymbol} {month} {c.Year}";
+    }
+
+    private async Task SwitchContractAsync(Contract contract)
+    {
+        _contract = contract;
+        Chart.TickSize = contract.Spec.TickSize;
+        InstrumentTitleText.Text = $"{contract.Spec.Description} Futures";
+        ContractText.Text = FriendlyContract(contract);
+        UpdateInstrumentTitle();
+        BuildContractMenu();
+        await _feed.ChangeContractAsync(contract);
     }
 
     // ── Chart type selector ─────────────────────────────────────────────────
@@ -329,10 +430,12 @@ public partial class MainWindow : Window
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
-        _contract = new ContractCalendar().SuggestActive(RootSymbol.NQ, DateOnly.FromDateTime(DateTime.UtcNow));
-        ContractText.Text = _contract.FullSymbol;
+        _contract = _calendar.SuggestActive(RootSymbol.NQ, DateOnly.FromDateTime(DateTime.UtcNow));
+        ContractText.Text = FriendlyContract(_contract);
         Chart.TickSize = _contract.Spec.TickSize;
         UpdateInstrumentTitle();
+        BuildContractMenu();
+        _lastRateTime = DateTime.UtcNow;
         await _feed.StartAsync(_contract);
         Heatmap.Attach(_feed);
         _renderTimer.Start();
@@ -370,10 +473,31 @@ public partial class MainWindow : Window
         UpdateOhlc(snapshot.Bars);
         Heatmap.InvalidateVisual(); // repaint the heatmap from the feed's tiled history
 
+        UpdateDiagnostics(snapshot);
+    }
+
+    private void UpdateDiagnostics(ChartSnapshot snapshot)
+    {
         var d = snapshot.Diagnostics;
-        string latest = snapshot.Detections.Count > 0 ? $"  ·  last: {snapshot.Detections[0].Label}" : string.Empty;
-        DiagnosticsText.Text =
-            $"events {d.EventsProcessed:N0}   ·   queue {d.CurrentQueueDepth}   ·   dropped {d.DroppedCanonicalEvents}   ·   gaps {d.SequenceGaps}   ·   signals {snapshot.TotalDetections:N0}{latest}";
+
+        // Events/sec over a ~1/2-second window so the value is steady, not jittery.
+        var now = DateTime.UtcNow;
+        double elapsed = (now - _lastRateTime).TotalSeconds;
+        if (elapsed >= 0.5)
+        {
+            long delta = Math.Max(0, d.EventsProcessed - _lastEvents);
+            MetricEventsRate.Text = ((long)(delta / elapsed)).ToString("N0", CultureInfo.InvariantCulture);
+            _lastEvents = d.EventsProcessed;
+            _lastRateTime = now;
+        }
+
+        MetricQueue.Text = d.CurrentQueueDepth.ToString("N0", CultureInfo.InvariantCulture);
+        MetricDropped.Text = d.DroppedCanonicalEvents.ToString("N0", CultureInfo.InvariantCulture);
+        MetricDropped.Foreground = d.DroppedCanonicalEvents > 0 ? _warningBrush : _secondaryBrush;
+        MetricGaps.Text = d.SequenceGaps.ToString("N0", CultureInfo.InvariantCulture);
+        MetricGaps.Foreground = d.SequenceGaps > 0 ? _warningBrush : _secondaryBrush;
+        MetricSignals.Text = snapshot.TotalDetections.ToString("N0", CultureInfo.InvariantCulture);
+        MetricLastSignal.Text = snapshot.Detections.Count > 0 ? snapshot.Detections[0].Label : "—";
     }
 
     private void UpdateBookState(bool valid, string? reason)
@@ -384,6 +508,9 @@ public partial class MainWindow : Window
             BookStateText.Text = "Book Valid";
             BookStateText.Foreground = _secondaryBrush;
             BookStateChip.ToolTip = null;
+            MetricBookDot.Fill = _buyBrush;
+            MetricBookState.Text = "Valid";
+            MetricBookState.Foreground = _secondaryBrush;
         }
         else
         {
@@ -391,6 +518,9 @@ public partial class MainWindow : Window
             BookStateText.Text = "Book Invalid";
             BookStateText.Foreground = _warningBrush;
             BookStateChip.ToolTip = reason is null ? "Order book is temporarily invalid." : $"Order book invalid: {reason}";
+            MetricBookDot.Fill = _warningBrush;
+            MetricBookState.Text = "Invalid";
+            MetricBookState.Foreground = _warningBrush;
         }
     }
 
@@ -579,6 +709,7 @@ public partial class MainWindow : Window
         SessionText.Text = _viewModel.SessionLabel;
         SimulatedBanner.Text = "SIMULATED DATA";
         ReadOnlyBanner.Text = "READ ONLY";
-        RithmicStatusText.Text = _viewModel.RithmicStatus;
+        RithmicStatusText.Text = "Rithmic (Mock)";
+        RithmicStatusText.ToolTip = _viewModel.RithmicStatus;
     }
 }

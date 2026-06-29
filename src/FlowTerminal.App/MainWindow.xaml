@@ -28,12 +28,48 @@
                 <TextBlock DockPanel.Dock="Left" Text="FLOW TERMINAL" Style="{StaticResource AppTitleStyle}"
                            VerticalAlignment="Center" Margin="0,0,14,0" />
                 <Border DockPanel.Dock="Left" Style="{StaticResource VDividerStyle}" Height="22" />
-                <TextBlock DockPanel.Dock="Left" x:Name="InstrumentTitleText" Style="{StaticResource InstrumentTitleStyle}"
-                           Margin="14,0,10,0" Text="—" />
-                <Border DockPanel.Dock="Left" Style="{StaticResource OutlineBadgeStyle}" Padding="7,2" Margin="0,0,16,0">
-                    <TextBlock x:Name="ContractText" Style="{StaticResource BadgeTextStyle}" FontWeight="SemiBold"
-                               Foreground="{StaticResource TextSecondaryBrush}" Text="—" />
-                </Border>
+                <!-- Instrument selector -->
+                <ToggleButton x:Name="InstrumentButton" DockPanel.Dock="Left" Style="{StaticResource ToolbarToggleStyle}"
+                              VerticalAlignment="Center" Margin="12,0,6,0" Padding="9,0">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock x:Name="InstrumentTitleText" Style="{StaticResource InstrumentTitleStyle}" Text="—" />
+                        <TextBlock Text="▾" FontSize="11" VerticalAlignment="Center" Margin="8,0,0,0"
+                                   Foreground="{StaticResource TextMutedBrush}" />
+                    </StackPanel>
+                </ToggleButton>
+                <Popup x:Name="InstrumentPopup" PlacementTarget="{Binding ElementName=InstrumentButton}" Placement="Bottom"
+                       StaysOpen="False" AllowsTransparency="True"
+                       IsOpen="{Binding IsChecked, ElementName=InstrumentButton, Mode=TwoWay}">
+                    <Border Background="{StaticResource SurfaceElevatedBrush}" BorderBrush="{StaticResource BorderStrongBrush}"
+                            BorderThickness="1" CornerRadius="8" Margin="6" MinWidth="240" SnapsToDevicePixels="True">
+                        <Border.Effect>
+                            <DropShadowEffect BlurRadius="18" ShadowDepth="3" Opacity="0.5" Color="#000000" />
+                        </Border.Effect>
+                        <StackPanel x:Name="InstrumentMenu" Margin="6" />
+                    </Border>
+                </Popup>
+
+                <!-- Contract selector -->
+                <ToggleButton x:Name="ContractButton" DockPanel.Dock="Left" Style="{StaticResource ToolbarToggleStyle}"
+                              VerticalAlignment="Center" Margin="0,0,16,0" Padding="9,0">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock x:Name="ContractText" Style="{StaticResource BadgeTextStyle}" FontWeight="SemiBold"
+                                   FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Text="—" />
+                        <TextBlock Text="▾" FontSize="11" VerticalAlignment="Center" Margin="8,0,0,0"
+                                   Foreground="{StaticResource TextMutedBrush}" />
+                    </StackPanel>
+                </ToggleButton>
+                <Popup x:Name="ContractPopup" PlacementTarget="{Binding ElementName=ContractButton}" Placement="Bottom"
+                       StaysOpen="False" AllowsTransparency="True"
+                       IsOpen="{Binding IsChecked, ElementName=ContractButton, Mode=TwoWay}">
+                    <Border Background="{StaticResource SurfaceElevatedBrush}" BorderBrush="{StaticResource BorderStrongBrush}"
+                            BorderThickness="1" CornerRadius="8" Margin="6" MinWidth="200" SnapsToDevicePixels="True">
+                        <Border.Effect>
+                            <DropShadowEffect BlurRadius="18" ShadowDepth="3" Opacity="0.5" Color="#000000" />
+                        </Border.Effect>
+                        <StackPanel x:Name="ContractMenu" Margin="6" />
+                    </Border>
+                </Popup>
 
                 <!-- Last price + change -->
                 <TextBlock DockPanel.Dock="Left" x:Name="LastPriceText" Style="{StaticResource NumericLargeStyle}"
@@ -443,19 +479,58 @@
         <!-- ════════════════════════════ FOOTER ════════════════════════════ -->
         <Border Grid.Row="3" Background="{StaticResource SurfacePrimaryBrush}"
                 BorderBrush="{StaticResource BorderSubtleBrush}" BorderThickness="0,1,0,0">
-            <DockPanel LastChildFill="False" Margin="14,7">
-                <TextBlock DockPanel.Dock="Left" Text="DIAGNOSTICS" Style="{StaticResource OverlineStyle}"
-                           VerticalAlignment="Center" Margin="0,0,12,0" />
-                <TextBlock DockPanel.Dock="Left" x:Name="DiagnosticsText" Style="{StaticResource DiagnosticsStyle}"
-                           VerticalAlignment="Center" Text="" />
+            <DockPanel LastChildFill="False" Margin="14,6">
 
-                <TextBlock DockPanel.Dock="Right" Text="v0.25.0" Style="{StaticResource TextMutedStyle}"
-                           VerticalAlignment="Center" Margin="12,0,0,0" />
-                <Border DockPanel.Dock="Right" Style="{StaticResource VDividerStyle}" Height="16" />
-                <TextBlock DockPanel.Dock="Right" x:Name="RithmicStatusText" Style="{StaticResource TextMutedStyle}"
-                           VerticalAlignment="Center" Text="" />
-                <Ellipse DockPanel.Dock="Right" Width="7" Height="7" Margin="0,0,7,0" VerticalAlignment="Center"
-                         Fill="{StaticResource WarningBrush}" />
+                <!-- Diagnostics metric chips -->
+                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
+                    <StackPanel Margin="0,0,20,0">
+                        <TextBlock Text="EVENTS/SEC" Style="{StaticResource OverlineStyle}" />
+                        <TextBlock x:Name="MetricEventsRate" Style="{StaticResource MetricValueStyle}" Text="0" />
+                    </StackPanel>
+                    <StackPanel Margin="0,0,20,0">
+                        <TextBlock Text="QUEUE DEPTH" Style="{StaticResource OverlineStyle}" />
+                        <TextBlock x:Name="MetricQueue" Style="{StaticResource MetricValueStyle}" Text="0" />
+                    </StackPanel>
+                    <StackPanel Margin="0,0,20,0">
+                        <TextBlock Text="DROPPED" Style="{StaticResource OverlineStyle}" />
+                        <TextBlock x:Name="MetricDropped" Style="{StaticResource MetricValueStyle}" Text="0" />
+                    </StackPanel>
+                    <StackPanel Margin="0,0,20,0">
+                        <TextBlock Text="SEQ GAPS" Style="{StaticResource OverlineStyle}" />
+                        <TextBlock x:Name="MetricGaps" Style="{StaticResource MetricValueStyle}" Text="0" />
+                    </StackPanel>
+                    <StackPanel Margin="0,0,20,0">
+                        <TextBlock Text="SIGNALS" Style="{StaticResource OverlineStyle}" />
+                        <TextBlock x:Name="MetricSignals" Style="{StaticResource MetricValueStyle}" Text="0" />
+                    </StackPanel>
+                    <StackPanel Margin="0,0,20,0">
+                        <TextBlock Text="LAST SIGNAL" Style="{StaticResource OverlineStyle}" />
+                        <TextBlock x:Name="MetricLastSignal" Style="{StaticResource MetricValueStyle}" FontWeight="Normal"
+                                   Foreground="{StaticResource TextSecondaryBrush}" MaxWidth="180"
+                                   TextTrimming="CharacterEllipsis" Text="—" />
+                    </StackPanel>
+                    <StackPanel>
+                        <TextBlock Text="BOOK STATE" Style="{StaticResource OverlineStyle}" />
+                        <StackPanel Orientation="Horizontal">
+                            <Ellipse x:Name="MetricBookDot" Width="6" Height="6" Margin="0,0,5,0"
+                                     VerticalAlignment="Center" Fill="{StaticResource BullishBrush}" />
+                            <TextBlock x:Name="MetricBookState" Style="{StaticResource MetricValueStyle}" FontSize="12" Text="—" />
+                        </StackPanel>
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- Connection + version -->
+                <TextBlock DockPanel.Dock="Right" Text="v0.26.0" Style="{StaticResource TextMutedStyle}"
+                           VerticalAlignment="Center" Margin="14,0,0,0" />
+                <Border DockPanel.Dock="Right" Style="{StaticResource VDividerStyle}" Height="18" />
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Ellipse Width="7" Height="7" Margin="0,0,8,0" VerticalAlignment="Center" Fill="{StaticResource BullishBrush}" />
+                    <StackPanel>
+                        <TextBlock x:Name="RithmicStatusText" Style="{StaticResource MetricValueStyle}" FontSize="12"
+                                   Foreground="{StaticResource TextSecondaryBrush}" Text="Rithmic (Mock)" />
+                        <TextBlock x:Name="ConnectionRegionText" Style="{StaticResource OverlineStyle}" Text="US EAST · NEW YORK" />
+                    </StackPanel>
+                </StackPanel>
             </DockPanel>
         </Border>
     </Grid>

@@ -86,16 +86,58 @@ public sealed class LiveFeedService : IAsyncDisposable
     private CancellationTokenSource? _cts;
     private Contract? _contract;
     private TimeSpan _interval = TimeSpan.FromMinutes(1);
+    private decimal _startPrice = 20_000m;
     private int _switching;
 
     /// <summary>The bar timeframe the feed is currently aggregating.</summary>
     public TimeSpan Timeframe => _interval;
 
+    /// <summary>The contract the feed is currently streaming.</summary>
+    public Contract? Contract => _contract;
+
     public Task StartAsync(Contract contract)
     {
         _contract = contract;
+        _startPrice = DefaultStartPrice(contract.Root);
         return StartFeedAsync();
     }
+
+    /// <summary>
+    /// Switches the streamed contract (e.g. NQ ↔ ES, or a different expiry). The feed
+    /// is stopped, per-session analytics reset, history re-warmed for the new contract
+    /// and the live stream resumed. View/observation only — no orders are involved.
+    /// </summary>
+    public async Task ChangeContractAsync(Contract contract)
+    {
+        if (_contract is not null && contract.FullSymbol == _contract.FullSymbol)
+        {
+            return;
+        }
+
+        if (Interlocked.Exchange(ref _switching, 1) == 1)
+        {
+            return;
+        }
+
+        try
+        {
+            await StopFeedAsync().ConfigureAwait(false);
+            lock (_lock)
+            {
+                _contract = contract;
+                _startPrice = DefaultStartPrice(contract.Root);
+                ResetSessionState();
+            }
+
+            await StartFeedAsync().ConfigureAwait(false);
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _switching, 0);
+        }
+    }
+
+    private static decimal DefaultStartPrice(RootSymbol root) => root == RootSymbol.ES ? 5_000m : 20_000m;
 
     /// <summary>
     /// Switches the bar timeframe. The current feed is stopped, the per-session
@@ -140,7 +182,7 @@ public sealed class LiveFeedService : IAsyncDisposable
         // 1) Warm-start with ~recent synthetic history (off the UI thread) so the
         //    chart, profile, VWAP, footprint and TPO are populated the moment the
         //    window opens, instead of slowly building one live bar at a time.
-        const decimal startPrice = 20_000m;
+        decimal startPrice = _startPrice;
         await Task.Run(() => WarmUp(_contract!, startPrice), _cts.Token).ConfigureAwait(false);
 
         // 2) Go live, continuing from the warmed-up price so there is no seam.
