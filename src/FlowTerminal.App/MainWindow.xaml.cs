@@ -337,6 +337,7 @@ public partial class MainWindow : Window
                 MinWidth = 78,
                 Height = 28,
                 Margin = new Thickness(0, 0, 4, 0),
+                ToolTip = isChart ? "Chart workspace (C)" : "Heatmap workspace (H)",
             };
             btn.Click += OnWorkspaceTabClick;
             _workspaceTabs.Add(btn);
@@ -594,15 +595,16 @@ public partial class MainWindow : Window
         AddIndicatorButton.Click += (_, _) => IndicatorsButton.IsChecked = true;
         FootprintModeButton.Click += (_, _) => CycleFootprintPreset();
 
+        // Surface keyboard shortcuts in the tooltips of the controls they drive.
+        UndoButton.ToolTip = "Undo drawing (Ctrl+Z)";
+        RedoButton.ToolTip = "Redo drawing (Ctrl+Y)";
+        AddIndicatorButton.ToolTip = "Indicators (I)";
+        IndicatorsButton.ToolTip = "Indicators (I)";
+        RestartButton.ToolTip = "Restart session";
+
         RestartButton.Click += async (_, _) => await _feed.RestartAsync();
 
-        PlayPauseButton.Click += (_, _) =>
-        {
-            bool paused = PlayPauseButton.IsChecked == true;
-            _feed.SetPaused(paused);
-            PlayPauseButton.Content = paused ? "▶" : "❚❚";
-            PlayPauseButton.ToolTip = paused ? "Resume" : "Pause";
-        };
+        PlayPauseButton.Click += (_, _) => ApplyPlayPause();
 
         SpeedButton.Click += (_, _) =>
         {
@@ -612,13 +614,78 @@ public partial class MainWindow : Window
             SpeedButton.Content = $"{s:0}×";
         };
 
-        // Keyboard: Ctrl+Z / Ctrl+Y for drawing undo/redo.
-        PreviewKeyDown += (_, e) =>
+        PreviewKeyDown += OnGlobalKeyDown;
+    }
+
+    private void ApplyPlayPause()
+    {
+        bool paused = PlayPauseButton.IsChecked == true;
+        _feed.SetPaused(paused);
+        PlayPauseButton.Content = paused ? "▶" : "❚❚";
+        PlayPauseButton.ToolTip = paused ? "Resume (Space)" : "Pause (Space)";
+    }
+
+    /// <summary>Switches the workspace tab (true = Chart, false = Heatmap).</summary>
+    private void SelectWorkspace(bool isChart)
+    {
+        foreach (var b in _workspaceTabs) b.IsChecked = b.Tag is bool t && t == isChart;
+        ChartWorkspace.Visibility = isChart ? Visibility.Visible : Visibility.Collapsed;
+        HeatmapWorkspace.Visibility = isChart ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    /// <summary>Toggles a study by short code through the same setter the menu uses.</summary>
+    private void ToggleStudy(string code)
+    {
+        if (_indicatorSetters.TryGetValue(code, out var set))
         {
-            if ((Keyboard.Modifiers & ModifierKeys.Control) == 0) return;
+            set(!_studyState.IsEnabled(code));
+        }
+    }
+
+    private void CloseAllFlyouts()
+    {
+        IndicatorsButton.IsChecked = false;
+        TemplatesButton.IsChecked = false;
+        InstrumentButton.IsChecked = false;
+        ContractButton.IsChecked = false;
+    }
+
+    /// <summary>
+    /// Global keyboard shortcuts. Single-key shortcuts are suppressed while typing in a
+    /// text box so they never clobber text entry; Ctrl combos always apply. All actions
+    /// route to existing, wired controls — nothing here is decorative.
+    /// </summary>
+    private void OnGlobalKeyDown(object sender, KeyEventArgs e)
+    {
+        bool ctrl = (Keyboard.Modifiers & ModifierKeys.Control) != 0;
+        if (ctrl)
+        {
             if (e.Key == Key.Z) { Chart.Undo(); e.Handled = true; }
             else if (e.Key == Key.Y) { Chart.Redo(); e.Handled = true; }
-        };
+            return;
+        }
+
+        // Don't hijack typing.
+        if (Keyboard.FocusedElement is System.Windows.Controls.Primitives.TextBoxBase)
+        {
+            return;
+        }
+
+        switch (e.Key)
+        {
+            case Key.F: Chart.ReturnToLive(); e.Handled = true; break;
+            case Key.R: Chart.ResetView(); e.Handled = true; break;
+            case Key.C: SelectWorkspace(true); e.Handled = true; break;
+            case Key.H: SelectWorkspace(false); e.Handled = true; break;
+            case Key.P: ToggleStudy("FP"); e.Handled = true; break;
+            case Key.I: IndicatorsButton.IsChecked = true; e.Handled = true; break;
+            case Key.Space:
+                PlayPauseButton.IsChecked = !(PlayPauseButton.IsChecked == true);
+                ApplyPlayPause();
+                e.Handled = true;
+                break;
+            case Key.Escape: CloseAllFlyouts(); e.Handled = true; break;
+        }
     }
 
     // ── Templates (saved chart layouts) ─────────────────────────────────────

@@ -129,6 +129,22 @@ public sealed class SkiaChartHost : SKElement
 
     public void Attach(StudyState studies) => _studies = studies;
 
+    /// <summary>Scrolls back to the live (most recent) bar without changing zoom.</summary>
+    public void ReturnToLive()
+    {
+        _candleView.Pan = 0;
+        _footprintView.Pan = 0;
+        InvalidateVisual();
+    }
+
+    /// <summary>Resets pan, time zoom and price zoom to defaults (return-to-live + default scale).</summary>
+    public void ResetView()
+    {
+        _candleView.Pan = 0; _candleView.Visible = 60; _candleView.PriceZoom = 1.0;
+        _footprintView.Pan = 0; _footprintView.Visible = 18; _footprintView.PriceZoom = 1.0;
+        InvalidateVisual();
+    }
+
     public void UpdateFrame(IReadOnlyList<Bar> bars, ChartOverlays overlays)
     {
         _bars = bars;
