@@ -66,7 +66,7 @@ public static class StudyCatalog
         new StudyDefinition("Cumulative Volume Delta (CVD)", "CVD", StudyCategory.OrderFlowAndTape, StudyStatus.Active,
             "Net continuous accumulation/distribution of aggressive orders; isolates divergence.", DefaultOn: true),
         new StudyDefinition("Large / Block Trade Detector", "LT", StudyCategory.OrderFlowAndTape, StudyStatus.Active,
-            "Flags outsized block/institutional market orders in real time.", DetectorKey: "Large Trade", DefaultOn: true),
+            "Big Trades: emphasises unusually large aggressive executions as price/time bubbles (observed aggression, not trader intent).", DetectorKey: "Large Trade", DefaultOn: true),
         new StudyDefinition("Iceberg & Absorption Detector", "ICE", StudyCategory.OrderFlowAndTape, StudyStatus.Active,
             "Hidden refilling orders (estimated) and heavy passive absorption.", DetectorKey: "Iceberg", DefaultOn: true),
         new StudyDefinition("Speed of Tape (SOT)", "SOT", StudyCategory.OrderFlowAndTape, StudyStatus.EngineReady,

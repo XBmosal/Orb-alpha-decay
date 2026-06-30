@@ -1,3 +1,4 @@
+using FlowTerminal.Analytics.BigTrades;
 using FlowTerminal.Charting.Heatmap;
 using FlowTerminal.Domain.Events;
 using FlowTerminal.Domain.Instruments;
@@ -19,12 +20,13 @@ public class SyntheticHeatmapHistoryTests
     private static readonly Contract Nq = new(RootSymbol.NQ, QuarterlyMonth.December, 2025);
     private static readonly DateTime Start = new(2024, 6, 3, 14, 0, 0, DateTimeKind.Utc);
 
-    private static (LiquidityHeatmap Heat, List<TradeDot> Trades, MarketByPriceOrderBook Book) Drive(int events)
+    private static (LiquidityHeatmap Heat, List<TradeDot> Trades, MarketByPriceOrderBook Book, BigTradeDetector Big) Drive(int events)
     {
         var gen = new SyntheticSessionGenerator(1, Nq, Start, new SyntheticOptions { Seed = 7, StartPrice = 20_000m });
         var heat = new LiquidityHeatmap(TimeSpan.FromMilliseconds(250));
         var book = new MarketByPriceOrderBook();
         var trades = new List<TradeDot>();
+        var big = BigTradeDetector.For(RootSymbol.NQ);
 
         for (int i = 0; i < events; i++)
         {
@@ -37,17 +39,19 @@ public class SyntheticHeatmapHistoryTests
             }
             else if (e.Type == MarketEventType.Trade)
             {
-                trades.Add(new TradeDot(e.ExchangeTimestampUtc, e.PriceTicks, e.Quantity, e.Aggressor));
+                var classified = big.OnTrade(e, book.BestBidTicks, book.BestAskTicks, book.IsValid);
+                trades.Add(new TradeDot(e.ExchangeTimestampUtc, e.PriceTicks, e.Quantity, classified.Side));
             }
         }
 
-        return (heat, trades, book);
+        big.Flush();
+        return (heat, trades, book, big);
     }
 
     [Fact]
     public void Heatmap_History_Is_Genuine_And_Varied()
     {
-        var (heat, _, _) = Drive(40_000);
+        var (heat, _, _, _) = Drive(40_000);
         Assert.True(heat.ColumnCount > 20, "expected a real time history of columns");
 
         // Collect resting sizes across the recent history: a genuine book is varied,
@@ -69,7 +73,8 @@ public class SyntheticHeatmapHistoryTests
     [Fact]
     public void Rendered_Heatmap_Is_Green_And_Purple()
     {
-        var (heat, trades, book) = Drive(30_000);
+        var (heat, trades, book, big) = Drive(30_000);
+        var bigTrades = big.Snapshot(trades.Count > 0 ? trades[^1].Time : Start);
 
         long lo = long.MaxValue, hi = long.MinValue;
         int from = Math.Max(0, heat.Columns.Count - 80);
@@ -84,7 +89,7 @@ public class SyntheticHeatmapHistoryTests
         using var canvas = new SKCanvas(bmp);
         new BookmapRenderer().Render(canvas, new SKRect(0, 0, 900, 480), heat, trades,
             book.BestBidTicks, book.BestAskTicks, trades.Count > 0 ? trades[^1].PriceTicks : 0,
-            lo - pad, hi + pad, 0.25m);
+            lo - pad, hi + pad, 0.25m, bigTrades: bigTrades);
 
         bool green = false, purple = false, thermalOrange = false;
         for (int x = 0; x < bmp.Width; x += 2)
