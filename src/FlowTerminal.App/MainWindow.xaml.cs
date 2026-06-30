@@ -603,7 +603,7 @@ public partial class MainWindow : Window
                 TextAlignment = TextAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center,
                 HorizontalAlignment = HorizontalAlignment.Center,
-                Foreground = (Brush)FindResource(enabled ? "TextSecondaryBrush" : "GridLineBrush"),
+                Foreground = (Brush)FindResource(enabled ? "TextSecondaryBrush" : "TextMutedBrush"),
             },
         };
         if (enabled)
