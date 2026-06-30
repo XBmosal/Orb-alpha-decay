@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "claude/**"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # Mock profile: the cross-platform core + all tests. Must ALWAYS build without
+  # any proprietary Rithmic file. This is the gate that keeps mock mode functional.
+  core:
+    name: Core build & test (Linux, mock profile)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore
+        run: dotnet restore FlowTerminal.Core.slnf
+
+      - name: Build (no Rithmic SDK present)
+        run: dotnet build FlowTerminal.Core.slnf -c Release --no-restore
+
+      - name: Test
+        run: dotnet test FlowTerminal.Core.slnf -c Release --no-build --logger "trx;LogFileName=test-results.trx"
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: "**/test-results.trx"
+
+  # Full solution including the WPF desktop shell builds on Windows.
+  windows:
+    name: Full solution build (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore full solution
+        run: dotnet restore FlowTerminal.sln
+
+      - name: Build full solution (incl. WPF App)
+        run: dotnet build FlowTerminal.sln -c Release --no-restore
+
+      - name: Run tests
+        run: dotnet test FlowTerminal.sln -c Release --no-build

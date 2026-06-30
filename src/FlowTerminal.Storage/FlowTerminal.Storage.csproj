@@ -1,0 +1,29 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\FlowTerminal.Domain\FlowTerminal.Domain.csproj" />
+    <ProjectReference Include="..\FlowTerminal.MarketData\FlowTerminal.MarketData.csproj" />
+    <ProjectReference Include="..\FlowTerminal.Notes\FlowTerminal.Notes.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- SQLite flows to consumers (the desktop app uses settings/workspaces/notes). -->
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.10" />
+
+    <!--
+      Parquet (recording/replay) and DuckDB (inspection) are heavy and are only used
+      by the recorder/replay/inspector code, which the desktop shell does not invoke
+      at runtime. PrivateAssets=all keeps these out of the app's published output;
+      the tools and tests that actually run them reference these packages directly.
+    -->
+    <PackageReference Include="Parquet.Net" Version="4.25.0" PrivateAssets="all" />
+    <PackageReference Include="DuckDB.NET.Data.Full" Version="1.1.3" PrivateAssets="all" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

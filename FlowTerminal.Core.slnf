@@ -1,0 +1,30 @@
+{
+  "solution": {
+    "path": "FlowTerminal.sln",
+    "projects": [
+      "benchmarks\\FlowTerminal.Benchmarks\\FlowTerminal.Benchmarks.csproj",
+      "src\\FlowTerminal.Analytics\\FlowTerminal.Analytics.csproj",
+      "src\\FlowTerminal.Charting\\FlowTerminal.Charting.csproj",
+      "src\\FlowTerminal.Domain\\FlowTerminal.Domain.csproj",
+      "src\\FlowTerminal.Infrastructure\\FlowTerminal.Infrastructure.csproj",
+      "src\\FlowTerminal.MarketData\\FlowTerminal.MarketData.csproj",
+      "src\\FlowTerminal.Notes\\FlowTerminal.Notes.csproj",
+      "src\\FlowTerminal.OrderBook\\FlowTerminal.OrderBook.csproj",
+      "src\\FlowTerminal.Replay\\FlowTerminal.Replay.csproj",
+      "src\\FlowTerminal.Rithmic\\FlowTerminal.Rithmic.csproj",
+      "src\\FlowTerminal.Storage\\FlowTerminal.Storage.csproj",
+      "tests\\FlowTerminal.Analytics.Tests\\FlowTerminal.Analytics.Tests.csproj",
+      "tests\\FlowTerminal.Domain.Tests\\FlowTerminal.Domain.Tests.csproj",
+      "tests\\FlowTerminal.IntegrationTests\\FlowTerminal.IntegrationTests.csproj",
+      "tests\\FlowTerminal.MarketData.Tests\\FlowTerminal.MarketData.Tests.csproj",
+      "tests\\FlowTerminal.OrderBook.Tests\\FlowTerminal.OrderBook.Tests.csproj",
+      "tests\\FlowTerminal.PerformanceTests\\FlowTerminal.PerformanceTests.csproj",
+      "tests\\FlowTerminal.Replay.Tests\\FlowTerminal.Replay.Tests.csproj",
+      "tests\\FlowTerminal.Storage.Tests\\FlowTerminal.Storage.Tests.csproj",
+      "tests\\FlowTerminal.UiTests\\FlowTerminal.UiTests.csproj",
+      "tools\\FlowTerminal.DataInspector\\FlowTerminal.DataInspector.csproj",
+      "tools\\FlowTerminal.DataRepair\\FlowTerminal.DataRepair.csproj",
+      "tools\\FlowTerminal.ReplayValidator\\FlowTerminal.ReplayValidator.csproj"
+    ]
+  }
+}

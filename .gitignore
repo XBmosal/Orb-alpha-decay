@@ -1,0 +1,51 @@
+# ---- Build output ----
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+x64/
+*.user
+*.suo
+.vs/
+artifacts/
+publish/
+
+# ---- Logs and crash dumps ----
+logs/
+*.log
+*.dmp
+crashdumps/
+
+# ---- Local databases / settings (never commit user data) ----
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+appsettings.local.json
+appsettings.Development.json
+secrets.json
+
+# ---- Private market-data recordings (never commit) ----
+data/
+recordings/
+*.parquet
+*.duckdb
+
+# ---- Installers / packaging output ----
+*.msix
+*.msi
+*.appinstaller
+
+# ---- User workspaces / screenshots / notes exports ----
+workspaces/
+screenshots/
+notes-export/
+
+# ---- Proprietary Rithmic SDK files (MUST NOT be committed) ----
+lib/rithmic/**
+!lib/rithmic/README.md
+!lib/rithmic/.gitkeep
+
+# ---- OS noise ----
+.DS_Store
+Thumbs.db
