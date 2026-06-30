@@ -44,8 +44,10 @@ public sealed class DomHost : SKElement
         IReadOnlyList<double>? widths, InstrumentSpec? spec, decimal tickSize)
     {
         // While frozen the ladder rows are held; layout (columns/widths) still applies so
-        // the column editor stays responsive.
-        if (!_frozen)
+        // the column editor stays responsive. Freezing never strands the view on an empty
+        // frame: if there is nothing held yet (e.g. the book was still warming up when the
+        // user hit Freeze), keep taking live updates until there is real depth to hold.
+        if (!_frozen || _rows.Count == 0)
         {
             _rows = rows;
             _spec = spec;
