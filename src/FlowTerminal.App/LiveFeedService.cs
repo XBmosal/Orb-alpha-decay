@@ -562,12 +562,13 @@ public sealed class LiveFeedService : IAsyncDisposable
             }
 
             var va = _profile.ComputeValueArea();
+            var bigTrades = _bigTrades.Snapshot(_lastEventUtc == default ? DateTime.UtcNow : _lastEventUtc);
             var overlays = new ChartOverlays(
                 _profile.Levels(), _profile.PocTicks(), va.VahTicks, va.ValTicks,
                 vwap, fvgs,
                 _orb is { IsEstablished: true } orb ? orb.HighTicks : null,
                 _orb is { IsEstablished: true } orb2 ? orb2.LowTicks : null,
-                footprint, tpoRows);
+                footprint, tpoRows, bigTrades);
 
             // CVD history (completed bars + the developing bar so the line is live).
             var cvdSeries = new List<CvdBar>(_cvdBars.Count + 1);
@@ -576,7 +577,6 @@ public sealed class LiveFeedService : IAsyncDisposable
 
             long wallFloor = (_contract?.Root ?? RootSymbol.NQ) == RootSymbol.ES ? 300 : 150;
             var dom = ReadOnlyDom.Build(_book, _profile, 12, _pullStack, wallFloor);
-            var bigTrades = _bigTrades.Snapshot(_lastEventUtc == default ? DateTime.UtcNow : _lastEventUtc);
             return new ChartSnapshot(
                 bars, dom, _cvd.CumulativeDelta, _tape.Latest(50),
                 _book.IsValid, _book.InvalidReason, _diagnostics.Snapshot(),

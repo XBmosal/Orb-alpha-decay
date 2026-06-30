@@ -2,8 +2,10 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Input;
 using FlowTerminal.Analytics.Bars;
+using FlowTerminal.Analytics.BigTrades;
 using FlowTerminal.Analytics.Footprints;
 using FlowTerminal.Charting;
+using FlowTerminal.Charting.BigTrades;
 using FlowTerminal.Charting.Drawings;
 using FlowTerminal.Charting.Overlays;
 using SkiaSharp;
@@ -40,6 +42,7 @@ public sealed class SkiaChartHost : SKElement
     private readonly DrawingRenderer _drawingRenderer = new();
     private readonly IndicatorSeriesEngine _indicatorEngine = new();
     private readonly IndicatorRenderer _indicatorRenderer = new();
+    private readonly BigTradeRenderer _bigTradeRenderer = new();
     private IndicatorRenderData _indicatorData = IndicatorRenderData.Empty;
     private List<ChartDrawing> _drawings = new();
     private readonly Stack<List<ChartDrawing>> _undo = new();
@@ -298,6 +301,50 @@ public sealed class SkiaChartHost : SKElement
 
     private float TimeToX(ChartViewport vp, DateTime t) => vp.BarCenterX(NearestBarByTime(t));
 
+    // ── Big Trades overlay (bar-indexed placement) ──────────────────────────
+
+    private void RenderBigTrades(SKCanvas canvas, ChartViewport vp)
+    {
+        // Only the groups whose bar is on screen — bounds the work and normalizes bubble
+        // sizing to the visible window.
+        var visible = new List<BigTradeGroup>();
+        foreach (var g in _overlayData.BigTrades)
+            if (vp.IsBarVisible(ContainingBarIndex(g.EndUtc))) visible.Add(g);
+        if (visible.Count == 0) return;
+
+        _bigTradeRenderer.RenderMapped(canvas,
+            new SKRect(vp.PlotLeft, vp.PlotTop, vp.PlotRight, vp.PlotBottom),
+            visible, t => BigTradeX(vp, t), vp.PriceToY, vp.MinPriceTicks, vp.MaxPriceTicks);
+    }
+
+    /// <summary>X for a trade time: the centre of the bar it falls in, nudged by its position within that bar.</summary>
+    private float BigTradeX(ChartViewport vp, DateTime t)
+    {
+        if (_bars.Count == 0) return vp.PlotLeft;
+        int i = ContainingBarIndex(t);
+        DateTime start = _bars[i].StartUtc;
+        DateTime end = i + 1 < _bars.Count ? _bars[i + 1].StartUtc
+            : start + (i > 0 ? _bars[i].StartUtc - _bars[i - 1].StartUtc : TimeSpan.FromMinutes(1));
+        double frac = end > start ? Math.Clamp((t - start).TotalSeconds / (end - start).TotalSeconds, 0, 1) : 0.5;
+        return vp.BarCenterX(i) + (float)(frac - 0.5) * vp.BarSlotWidth;
+    }
+
+    /// <summary>Index of the bar whose start time is the latest at or before <paramref name="t"/>.</summary>
+    private int ContainingBarIndex(DateTime t)
+    {
+        if (_bars.Count == 0) return 0;
+        if (t <= _bars[0].StartUtc) return 0;
+        if (t >= _bars[^1].StartUtc) return _bars.Count - 1;
+        int lo = 0, hi = _bars.Count - 1, ans = 0;
+        while (lo <= hi)
+        {
+            int mid = (lo + hi) / 2;
+            if (_bars[mid].StartUtc <= t) { ans = mid; lo = mid + 1; }
+            else hi = mid - 1;
+        }
+        return ans;
+    }
+
     private int NearestBarByTime(DateTime t)
     {
         if (_bars.Count == 0) return 0;
@@ -456,6 +503,15 @@ public sealed class SkiaChartHost : SKElement
             if (!_indicatorData.IsEmpty)
             {
                 _indicatorRenderer.RenderOverlays(canvas, viewport, _indicatorData);
+            }
+
+            // Big Trades: aggressive-execution bubbles at their price/time, on top of the
+            // candles. Gated by the Large/Block Trade study. Each group is placed in the bar
+            // it executed in (offset within the bar by its intra-bar time) so bubbles in the
+            // same bar spread out instead of stacking.
+            if (_studies?.IsEnabled("LT") == true && _overlayData.BigTrades.Count > 0)
+            {
+                RenderBigTrades(canvas, viewport);
             }
         }
 

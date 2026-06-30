@@ -1,3 +1,4 @@
+using FlowTerminal.Analytics.BigTrades;
 using FlowTerminal.Analytics.Footprints;
 using FlowTerminal.Analytics.PriceAction;
 using FlowTerminal.Analytics.Profiles;
@@ -19,12 +20,13 @@ public sealed record ChartOverlays(
     long? OrbHighTicks,
     long? OrbLowTicks,
     IReadOnlyList<FootprintBar> Footprint,
-    IReadOnlyList<TpoRow> Tpo)
+    IReadOnlyList<TpoRow> Tpo,
+    IReadOnlyList<BigTradeGroup> BigTrades)
 {
     public static ChartOverlays Empty { get; } = new(
         Array.Empty<ProfileLevel>(), long.MinValue, long.MinValue, long.MinValue,
         Array.Empty<double>(), Array.Empty<FvgBox>(), null, null,
-        Array.Empty<FootprintBar>(), Array.Empty<TpoRow>());
+        Array.Empty<FootprintBar>(), Array.Empty<TpoRow>(), Array.Empty<BigTradeGroup>());
 }
 
 /// <summary>A fair-value gap anchored to the bar index where it formed.</summary>

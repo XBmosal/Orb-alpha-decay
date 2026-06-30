@@ -51,12 +51,27 @@ public sealed class BigTradeRenderer
         BigTradeVisualSettings? visual = null)
     {
         if (groups.Count == 0 || maxPriceTicks <= minPriceTicks) return;
-        var v = visual ?? BigTradeVisualSettings.Default;
-
         double totalSec = Math.Max(1e-6, (t1 - t0).TotalSeconds);
         long span = maxPriceTicks - minPriceTicks;
         float X(DateTime t) => bounds.Left + (float)((t - t0).TotalSeconds / totalSec) * bounds.Width;
         float Y(long price) => bounds.Bottom - (price - minPriceTicks) / (float)span * bounds.Height;
+        RenderMapped(canvas, bounds, groups, X, Y, minPriceTicks, maxPriceTicks, visual);
+    }
+
+    /// <summary>
+    /// Renders bubbles using caller-supplied coordinate maps, so a bar-indexed candle chart
+    /// and a continuous-time heatmap can share one bubble implementation. <paramref name="x"/>
+    /// maps a trade time to a pixel X (e.g. via the bar it falls in); <paramref name="y"/>
+    /// maps a price (ticks) to a pixel Y. Groups outside the price window or the horizontal
+    /// plot are culled.
+    /// </summary>
+    public void RenderMapped(
+        SKCanvas canvas, SKRect plot, IReadOnlyList<BigTradeGroup> groups,
+        Func<DateTime, float> x, Func<long, float> y, long minPriceTicks, long maxPriceTicks,
+        BigTradeVisualSettings? visual = null)
+    {
+        if (groups.Count == 0 || maxPriceTicks <= minPriceTicks) return;
+        var v = visual ?? BigTradeVisualSettings.Default;
 
         // Reference magnitude for size normalization: the largest visible total.
         long refMax = 1;
@@ -82,17 +97,17 @@ public sealed class BigTradeRenderer
         foreach (var g in ordered)
         {
             if (g.PriceTicks < minPriceTicks || g.PriceTicks >= maxPriceTicks) continue;
-            if (g.EndUtc < t0) continue;
 
-            float cx = X(g.EndUtc);
-            float cy = Y(g.PriceTicks);
             float r = Radius(g.TotalQuantity, refMax, v);
+            float cx = x(g.EndUtc);
+            if (cx < plot.Left - r || cx > plot.Right + r) continue; // off the horizontal plot
+            float cy = y(g.PriceTicks);
             var baseColor = ColorFor(g.Side);
 
             // Optional sweep capsule spanning the executed price range.
             if (v.ShowSweepCapsule && g.IsSweep && g.MaxPriceTicks > g.MinPriceTicks)
             {
-                float top = Y(g.MaxPriceTicks), bot = Y(g.MinPriceTicks);
+                float top = y(g.MaxPriceTicks), bot = y(g.MinPriceTicks);
                 using var cap = new SKPaint { Color = baseColor.WithAlpha(48).ToSkColor(), IsAntialias = true };
                 canvas.DrawRoundRect(new SKRect(cx - r * 0.5f, top, cx + r * 0.5f, bot), r * 0.5f, r * 0.5f, cap);
             }

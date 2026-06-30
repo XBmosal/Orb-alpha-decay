@@ -85,6 +85,16 @@ never linear (area would grow quadratically).
 - Deterministic z-order: small first, sweeps and very large last. No red, no neon, no
   thermal/rainbow palette.
 
+## Candlestick-chart overlay
+
+The same Big Trade groups render as bubbles on the normal candlestick chart, gated by the
+**Large/Block Trade** study. The chart is bar-indexed, so each group is placed in the bar
+it executed in and nudged horizontally by its position **within** that bar — so several
+big trades in one bar spread out instead of stacking. Only groups in visible bars are
+drawn (which also normalizes bubble sizing to the visible window). The bubble renderer is
+shared with the heatmap via a coordinate-agnostic `RenderMapped` entry point, so both
+views look identical and reconcile against one engine.
+
 ## Heatmap integration
 
 The liquidity heatmap emphasises the **shared** Big Trade groups over its faint

@@ -29,7 +29,7 @@ Legend: ✅ done · 🟡 partial / data-limited · ⬜ staged (next phase).
 | NQ / ES presets (8 built-ins) | ✅ | ✅ | — | — | — | editable |
 | Live wiring + snapshot exposure | ✅ | ✅ | — | ✅ | ✅ | `ShowBigTrades`, gated by LT study |
 | Heatmap integration (shared groups) | ✅ | ✅ | — | ✅ | ✅ | aligned via heatmap mapping |
-| Candle-chart overlay | ⬜ | — | — | (renderer ✅) | — | renderer ready; bar-index mapping pending |
+| Candle-chart overlay | ✅ | ✅ | — | ✅ | — | bubbles placed in the bar they executed in (intra-bar time offset); gated by LT study |
 | Settings panel + live preview | ⬜ | — | — | — | — | model + presets ready |
 | Tooltip / inspector / pin | ⬜ | — | — | — | — | group model carries the fields |
 | Alerts (read-only) | ⬜ | — | — | — | — | |
