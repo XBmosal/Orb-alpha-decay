@@ -17,6 +17,9 @@ public sealed record ChartTemplate(
 {
     /// <summary>Footprint cell mode (added in v0.37; older templates default to Bid×Ask).</summary>
     public string FootprintMode { get; init; } = "BidAsk";
+
+    /// <summary>Read-only DOM layout preset (added in v0.42; older templates default to Full Professional).</summary>
+    public string DomPreset { get; init; } = "Full Professional";
 }
 
 /// <summary>

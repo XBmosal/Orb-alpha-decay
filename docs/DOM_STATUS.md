@@ -19,10 +19,12 @@ Legend: ✅ done · 🟡 partial / data-limited · ⬜ next phase.
 | Column registry + capability requirements | ✅ | ✅ | — | MBP/MBO/Trades flags |
 | 10 built-in presets (protected) | ✅ | ✅ | — | MBO preset capability-gated |
 | MBO order-level columns | 🟡 | ✅ (gated) | — | require native MBO; inactive on MBP feed |
-| Depth bars / best bid-ask emphasis / POC tint (WPF view) | ✅ | — | — | existing, unchanged |
-| Read-only label | ✅ | — | — | panel header |
+| Skia ladder renderer (depth bars, best bid/ask, wall outlines, POC tint) | ✅ | ✅ | — | replaces the WPF ItemsControl; preset-driven columns |
+| Preset rendering in-app (9 MBP presets) + cycle button | ✅ | ✅ | — | toolbar "DOM:" button; persists in templates |
+| READ ONLY label in panel header | ✅ | — | — | |
+| Preset persistence (templates) | ✅ | — | — | mirrors footprint preset |
 | Interactive column builder (show/hide/reorder/resize) | ⬜ | — | — | next phase (model ready) |
-| Per-column settings panel + preset persistence | ⬜ | — | — | next phase |
+| Per-column settings panel | ⬜ | — | — | next phase |
 | Auto-center modes / return-to-market / freeze view | ⬜ | — | — | next phase |
 | Row inspector / context menu / DOM tooltips | ⬜ | — | — | next phase |
 | Replay hash for DOM analytics | ⬜ | — | — | book/profile already deterministic |

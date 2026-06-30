@@ -404,6 +404,28 @@ public partial class MainWindow : Window
 
     private string _footprintPreset = FlowTerminal.Analytics.Footprints.FootprintPresetRegistry.Default.Name;
 
+    // Read-only DOM layout: which preset's columns the Skia ladder renders.
+    private string _domPreset = "Full Professional";
+    private IReadOnlyList<FlowTerminal.Charting.Dom.DomColumnType> _domColumns =
+        FlowTerminal.Charting.Dom.DomPresetRegistry.ByName("Full Professional")!.Columns;
+
+    private void ApplyDomPreset(string name)
+    {
+        var preset = FlowTerminal.Charting.Dom.DomPresetRegistry.ByName(name)
+            ?? FlowTerminal.Charting.Dom.DomPresetRegistry.Default;
+        _domPreset = preset.Name;
+        _domColumns = preset.Columns;
+        DomPresetButton.Content = $"DOM: {preset.Name}";
+    }
+
+    private void CycleDomPreset()
+    {
+        var all = FlowTerminal.Charting.Dom.DomPresetRegistry.BuiltIns;
+        int idx = 0;
+        for (int i = 0; i < all.Count; i++) if (all[i].Name == _domPreset) idx = i;
+        ApplyDomPreset(all[(idx + 1) % all.Count].Name);
+    }
+
     /// <summary>Applies a named footprint preset for the current instrument, preserving the choice.</summary>
     private void ApplyFootprintPreset(string name)
     {
@@ -594,6 +616,7 @@ public partial class MainWindow : Window
         RedoButton.Click += (_, _) => Chart.Redo();
         AddIndicatorButton.Click += (_, _) => IndicatorsButton.IsChecked = true;
         FootprintModeButton.Click += (_, _) => CycleFootprintPreset();
+        DomPresetButton.Click += (_, _) => CycleDomPreset();
 
         // Surface keyboard shortcuts in the tooltips of the controls they drive.
         UndoButton.ToolTip = "Undo drawing (Ctrl+Z)";
@@ -776,7 +799,7 @@ public partial class MainWindow : Window
             (int)_feed.Timeframe.TotalMinutes,
             Chart.ChartType.ToString(),
             _cvdView.ToString(),
-            _studyState.Enabled.ToArray()) { FootprintMode = _footprintPreset });
+            _studyState.Enabled.ToArray()) { FootprintMode = _footprintPreset, DomPreset = _domPreset });
         _templateStore.Save(_templates);
         TemplateNameBox.Text = string.Empty;
         BuildTemplatesMenu();
@@ -792,6 +815,8 @@ public partial class MainWindow : Window
 
         if (FlowTerminal.Analytics.Footprints.FootprintPresetRegistry.ByName(t.FootprintMode) is not null)
             ApplyFootprintPreset(t.FootprintMode);
+        if (FlowTerminal.Charting.Dom.DomPresetRegistry.ByName(t.DomPreset) is not null)
+            ApplyDomPreset(t.DomPreset);
 
         await SelectTimeframeAsync(TimeSpan.FromMinutes(Math.Max(1, t.TimeframeMinutes)));
     }
@@ -808,6 +833,7 @@ public partial class MainWindow : Window
         _lastRateTime = DateTime.UtcNow;
         await _feed.StartAsync(_contract);
         ApplyFootprintPreset(_footprintPreset);
+        ApplyDomPreset(_domPreset);
         Heatmap.Attach(_feed);
         _renderTimer.Start();
     }
@@ -955,65 +981,26 @@ public partial class MainWindow : Window
         ChangePctText.Foreground = dirBrush;
     }
 
-    /// <summary>Row view-model for the read-only DOM ladder (display-only fields).</summary>
-    public sealed record DomRowVm(
-        string Price, string Bid, string Ask, string CumBid, string CumAsk,
-        GridLength BidFill, GridLength BidRest, GridLength AskFill, GridLength AskRest,
-        Brush RowBackground, Brush PriceBrush, Brush BidBrush, Brush AskBrush);
-
     private void UpdateDom(ChartSnapshot snapshot)
     {
         var rows = snapshot.Dom;
-        if (_contract is null || rows.Count == 0)
+        var spec = _contract?.Spec;
+        DomLadder.Update(rows, _domColumns, spec, spec?.TickSize ?? 0.25m);
+
+        if (_contract is null || rows.Count == 0 || !snapshot.BookValid)
         {
-            DomList.ItemsSource = null;
             BidPriceText.Text = "—";
             AskPriceText.Text = "—";
             SpreadText.Text = "—";
             return;
         }
 
-        var spec = _contract.Spec;
         long bestBid = snapshot.BestBidTicks;
         long bestAsk = snapshot.BestAskTicks;
-
-        long maxSize = 1;
-        foreach (var r in rows) maxSize = Math.Max(maxSize, Math.Max(r.BidSize, r.AskSize));
-
-        var list = new List<DomRowVm>(rows.Count);
-        foreach (var r in rows)
-        {
-            bool bidSide = r.PriceTicks <= bestBid;
-            bool askSide = r.PriceTicks >= bestAsk;
-            bool isBest = r.PriceTicks == bestBid || r.PriceTicks == bestAsk;
-
-            double bidFrac = bidSide ? Math.Clamp(r.BidSize / (double)maxSize, 0, 1) : 0;
-            double askFrac = askSide ? Math.Clamp(r.AskSize / (double)maxSize, 0, 1) : 0;
-
-            Brush rowBg = r.IsPoc ? _pocSoftBrush : isBest ? _bestRowBrush : Brushes.Transparent;
-            Brush priceBrush = r.PriceTicks == bestAsk ? _sellBrush
-                : r.PriceTicks == bestBid ? _buyBrush : _secondaryBrush;
-
-            list.Add(new DomRowVm(
-                PriceConverter.ToPrice(spec, r.PriceTicks).ToString("N2", CultureInfo.InvariantCulture),
-                bidSide && r.BidSize > 0 ? r.BidSize.ToString("N0", CultureInfo.InvariantCulture) : string.Empty,
-                askSide && r.AskSize > 0 ? r.AskSize.ToString("N0", CultureInfo.InvariantCulture) : string.Empty,
-                bidSide && r.CumulativeBid > 0 ? r.CumulativeBid.ToString("N0", CultureInfo.InvariantCulture) : string.Empty,
-                askSide && r.CumulativeAsk > 0 ? r.CumulativeAsk.ToString("N0", CultureInfo.InvariantCulture) : string.Empty,
-                new GridLength(bidFrac, GridUnitType.Star), new GridLength(1 - bidFrac, GridUnitType.Star),
-                new GridLength(askFrac, GridUnitType.Star), new GridLength(1 - askFrac, GridUnitType.Star),
-                rowBg, priceBrush, _buyBrush, _sellBrush));
-        }
-
-        DomList.ItemsSource = list;
-
-        if (snapshot.BookValid)
-        {
-            BidPriceText.Text = PriceConverter.ToPrice(spec, bestBid).ToString("N2", CultureInfo.InvariantCulture);
-            AskPriceText.Text = PriceConverter.ToPrice(spec, bestAsk).ToString("N2", CultureInfo.InvariantCulture);
-            decimal spread = PriceConverter.ToPrice(spec, bestAsk) - PriceConverter.ToPrice(spec, bestBid);
-            SpreadText.Text = spread.ToString("N2", CultureInfo.InvariantCulture);
-        }
+        BidPriceText.Text = PriceConverter.ToPrice(spec!, bestBid).ToString("N2", CultureInfo.InvariantCulture);
+        AskPriceText.Text = PriceConverter.ToPrice(spec!, bestAsk).ToString("N2", CultureInfo.InvariantCulture);
+        decimal spread = PriceConverter.ToPrice(spec!, bestAsk) - PriceConverter.ToPrice(spec!, bestBid);
+        SpreadText.Text = spread.ToString("N2", CultureInfo.InvariantCulture);
     }
 
     // ── Time & Sales filters ────────────────────────────────────────────────
