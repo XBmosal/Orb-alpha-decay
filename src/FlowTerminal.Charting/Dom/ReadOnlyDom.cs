@@ -146,6 +146,60 @@ public static class ReadOnlyDom
         return rows;
     }
 
+    /// <summary>
+    /// A deterministic 64-bit hash (FNV-1a) of a DOM snapshot's observable fields, in row
+    /// order. Two runs over the same recorded data produce the same value, so replays can
+    /// assert the DOM reconstructed identically. Order-sensitive by construction.
+    /// </summary>
+    public static ulong Hash(IReadOnlyList<DomRow> rows)
+    {
+        ArgumentNullException.ThrowIfNull(rows);
+        const ulong offset = 14695981039346656037UL;
+        const ulong prime = 1099511628211UL;
+        ulong h = offset;
+
+        static ulong Mix(ulong h, long v)
+        {
+            unchecked
+            {
+                for (int b = 0; b < 8; b++)
+                {
+                    h ^= (byte)(v >> (b * 8));
+                    h *= 1099511628211UL;
+                }
+            }
+            return h;
+        }
+
+        unchecked
+        {
+            foreach (var r in rows)
+            {
+                h = Mix(h, r.PriceTicks);
+                h = Mix(h, r.BidSize);
+                h = Mix(h, r.AskSize);
+                h = Mix(h, r.CumulativeBid);
+                h = Mix(h, r.CumulativeAsk);
+                h = Mix(h, r.TradedAtBid);
+                h = Mix(h, r.TradedAtAsk);
+                h = Mix(h, r.Delta);
+                h = Mix(h, r.BidPulled);
+                h = Mix(h, r.BidStacked);
+                h = Mix(h, r.AskPulled);
+                h = Mix(h, r.AskStacked);
+                h = Mix(h, r.BidReplenish);
+                h = Mix(h, r.AskReplenish);
+                // Pack the boolean flags into one byte so flag changes alter the hash.
+                long flags =
+                    (r.IsPoc ? 1 : 0) | (r.IsValueAreaHigh ? 2 : 0) | (r.IsValueAreaLow ? 4 : 0) |
+                    (r.IsBestBid ? 8 : 0) | (r.IsBestAsk ? 16 : 0) | (r.IsBidWall ? 32 : 0) | (r.IsAskWall ? 64 : 0);
+                h ^= (byte)flags;
+                h *= prime;
+            }
+        }
+        return h;
+    }
+
     private static long WallThreshold(IOrderBook book, Side side, long touch, long edge, long floor)
     {
         var sizes = new List<long>();

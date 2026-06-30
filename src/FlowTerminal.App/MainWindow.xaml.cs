@@ -813,6 +813,8 @@ public partial class MainWindow : Window
         AddIndicatorButton.Click += (_, _) => IndicatorsButton.IsChecked = true;
         FootprintModeButton.Click += (_, _) => CycleFootprintPreset();
         // The DOM column editor opens via the toggle button's IsChecked → Popup binding.
+        DomFreezeButton.Checked += (_, _) => DomLadder.Frozen = true;
+        DomFreezeButton.Unchecked += (_, _) => DomLadder.Frozen = false;
 
         // Surface keyboard shortcuts in the tooltips of the controls they drive.
         UndoButton.ToolTip = "Undo drawing (Ctrl+Z)";

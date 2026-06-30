@@ -26,7 +26,7 @@ $common = @(
     "/p:PublishSingleFile=false",
     "/p:DebugType=None",
     "/p:DebugSymbols=false",
-    "/p:Version=0.43.0"
+    "/p:Version=0.44.0"
 )
 
 if ($SelfContained) {

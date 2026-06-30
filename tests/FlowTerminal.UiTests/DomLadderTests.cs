@@ -165,4 +165,32 @@ public class DomLadderTests
         Assert.False(DomPresetRegistry.ByName("Classic Depth")!.RequiresMbo);
         Assert.Equal("Classic Depth", DomPresetRegistry.Default.Name);
     }
+
+    [Fact]
+    public void Hash_Is_Deterministic_For_Identical_Snapshots()
+    {
+        var a = Standard();
+        var b = Standard();
+        Assert.Equal(ReadOnlyDom.Hash(a), ReadOnlyDom.Hash(b));
+        Assert.NotEqual(0UL, ReadOnlyDom.Hash(a));
+    }
+
+    [Fact]
+    public void Hash_Changes_When_Rows_Differ_Or_Reorder()
+    {
+        var rows = Standard();
+        ulong baseline = ReadOnlyDom.Hash(rows);
+
+        // Reorder: hashing is order-sensitive.
+        var reversed = rows.Reverse().ToList();
+        Assert.NotEqual(baseline, ReadOnlyDom.Hash(reversed));
+
+        // A changed size flips the hash.
+        var mutated = rows.ToList();
+        mutated[0] = mutated[0] with { BidSize = mutated[0].BidSize + 1 };
+        Assert.NotEqual(baseline, ReadOnlyDom.Hash(mutated));
+
+        // Empty snapshot is stable and distinct.
+        Assert.Equal(ReadOnlyDom.Hash(Array.Empty<DomRow>()), ReadOnlyDom.Hash(new List<DomRow>()));
+    }
 }

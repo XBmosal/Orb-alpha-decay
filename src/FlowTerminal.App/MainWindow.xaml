@@ -384,6 +384,9 @@
                                         </DockPanel>
                                     </Border>
                                 </Popup>
+                                <ToggleButton DockPanel.Dock="Right" x:Name="DomFreezeButton" Style="{StaticResource ToolbarToggleStyle}"
+                                              VerticalAlignment="Center" Margin="6,0,0,0" Content="❄ Freeze"
+                                              ToolTip="Freeze the ladder to study a level (live readouts keep updating) — strictly read-only" />
                                 <Border DockPanel.Dock="Right" x:Name="BookStateChip" Style="{StaticResource OutlineBadgeStyle}"
                                         Padding="7,2" VerticalAlignment="Center">
                                     <StackPanel Orientation="Horizontal">
@@ -581,7 +584,7 @@
                 </StackPanel>
 
                 <!-- Connection + version -->
-                <TextBlock DockPanel.Dock="Right" Text="v0.43.0" Style="{StaticResource TextMutedStyle}"
+                <TextBlock DockPanel.Dock="Right" Text="v0.44.0" Style="{StaticResource TextMutedStyle}"
                            VerticalAlignment="Center" Margin="14,0,0,0" />
                 <Border DockPanel.Dock="Right" Style="{StaticResource VDividerStyle}" Height="18" />
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">

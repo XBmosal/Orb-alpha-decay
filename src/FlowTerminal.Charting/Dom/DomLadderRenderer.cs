@@ -20,7 +20,7 @@ public sealed class DomLadderRenderer
 
     public void Render(SKCanvas canvas, SKRect bounds, IReadOnlyList<DomRow> rows,
         IReadOnlyList<DomColumnType> columns, decimal tickSize, InstrumentSpec? spec = null,
-        IReadOnlyList<double>? widths = null)
+        IReadOnlyList<double>? widths = null, bool frozen = false, long? focusPriceTicks = null)
     {
         canvas.Clear(_palette.PanelBackground.ToSkColor());
         if (rows.Count == 0 || columns.Count == 0)
@@ -67,6 +67,9 @@ public sealed class DomLadderRenderer
         using var priceText = Text(_palette.Text, Math.Clamp(rowH * 0.56f, 8f, 12f), SKTextAlign.Center);
 
         float y0 = bounds.Top + headerH;
+        bool hasFocus = false;
+        float focusTop = 0;
+        DomRow focusRow = default;
         for (int rIdx = 0; rIdx < rows.Count; rIdx++)
         {
             var row = rows[rIdx];
@@ -86,6 +89,13 @@ public sealed class DomLadderRenderer
                 canvas.DrawRect(left, top, totalW, rowH, hl);
             }
 
+            if (focusPriceTicks is { } fp && row.PriceTicks == fp)
+            {
+                hasFocus = true;
+                focusTop = top;
+                focusRow = row;
+            }
+
             for (int i = 0; i < columns.Count; i++)
             {
                 float cl = x[i], cr = x[i + 1];
@@ -93,9 +103,73 @@ public sealed class DomLadderRenderer
             }
         }
 
+        // Hovered-row outline (read-only inspector cue).
+        if (hasFocus)
+            using (var fo = new SKPaint { Color = _palette.SelectedObject.ToSkColor(), Style = SKPaintStyle.Stroke, StrokeWidth = 1.2f, IsAntialias = true })
+                canvas.DrawRect(left, focusTop, totalW, rowH, fo);
+
         // READ ONLY badge, bottom-right, restrained.
         using var ro = Text(_palette.MutedText, 9f, SKTextAlign.Right);
         canvas.DrawText("READ ONLY", right, bounds.Bottom - 4f, ro);
+
+        // FROZEN badge, top-right — the ladder is held for study, still observational.
+        // Drawn on a filled chip so it stays legible over the column headers behind it.
+        if (frozen)
+        {
+            const string txt = "❄ FROZEN";
+            using var fz = Text(_palette.Warning, 9.5f, SKTextAlign.Right);
+            float tw = fz.MeasureText(txt);
+            var chip = new SKRect(right - tw - 8f, bounds.Top + 3f, right + 1f, bounds.Top + 17f);
+            using (var bg = new SKPaint { Color = _palette.PanelBackground.ToSkColor() })
+                canvas.DrawRect(chip, bg);
+            using (var edge = new SKPaint { Color = _palette.Warning.WithAlpha(120).ToSkColor(), Style = SKPaintStyle.Stroke, StrokeWidth = 1f })
+                canvas.DrawRect(chip, edge);
+            canvas.DrawText(txt, right - 4f, bounds.Top + 13.5f, fz);
+        }
+
+        // Row inspector: a compact breakdown of the hovered price along the bottom.
+        if (hasFocus)
+            DrawInspector(canvas, left, right, bounds.Bottom, focusRow, tickSize, spec);
+    }
+
+    private void DrawInspector(SKCanvas canvas, float left, float right, float bottom,
+        in DomRow row, decimal tickSize, InstrumentSpec? spec)
+    {
+        const float h = 22f;
+        float top = bottom - h - 16f;
+        using (var bg = new SKPaint { Color = _palette.PanelBackground.WithAlpha(235).ToSkColor() })
+            canvas.DrawRect(left, top, right - left, h, bg);
+        using (var edge = new SKPaint { Color = _palette.SelectedObject.WithAlpha(120).ToSkColor(), Style = SKPaintStyle.Stroke, StrokeWidth = 1f })
+            canvas.DrawRect(left, top, right - left, h, edge);
+
+        decimal price = spec is null ? row.PriceTicks * tickSize : PriceConverter.ToPrice(spec, row.PriceTicks);
+        float midY = top + h / 2f + 3.5f;
+        float x = left + 8f;
+
+        x = InspectorSeg(canvas, x, midY, "P", price.ToString("0.00"), _palette.Text);
+        x = InspectorSeg(canvas, x, midY, "Bid", row.BidSize.ToString("N0"), _palette.BidLiquidity);
+        x = InspectorSeg(canvas, x, midY, "Ask", row.AskSize.ToString("N0"), _palette.AskLiquidity);
+        x = InspectorSeg(canvas, x, midY, "ΣB", row.CumulativeBid.ToString("N0"), _palette.MutedText);
+        x = InspectorSeg(canvas, x, midY, "ΣA", row.CumulativeAsk.ToString("N0"), _palette.MutedText);
+        x = InspectorSeg(canvas, x, midY, "Exec", $"{row.TradedAtAsk:N0}/{row.TradedAtBid:N0}", _palette.Text);
+        x = InspectorSeg(canvas, x, midY, "Δ", (row.Delta >= 0 ? "+" : "") + row.Delta.ToString("N0"),
+            row.Delta >= 0 ? _palette.BidLiquidity : _palette.AskLiquidity);
+        if (row.IsBidWall || row.IsAskWall)
+            InspectorSeg(canvas, x, midY, "", "WALL", _palette.Warning);
+    }
+
+    private float InspectorSeg(SKCanvas canvas, float x, float midY, string label, string value, RgbaColor valueColor)
+    {
+        using var lbl = Text(_palette.MutedText, 9.5f, SKTextAlign.Left);
+        using var val = Text(valueColor, 10.5f, SKTextAlign.Left);
+        if (label.Length > 0)
+        {
+            canvas.DrawText(label, x, midY, lbl);
+            x += lbl.MeasureText(label) + 3f;
+        }
+        canvas.DrawText(value, x, midY, val);
+        x += val.MeasureText(value) + 12f;
+        return x;
     }
 
     private void DrawCell(SKCanvas canvas, DomColumnType type, in DomRow row, float cl, float cr,

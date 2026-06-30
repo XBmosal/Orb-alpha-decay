@@ -93,6 +93,40 @@ public class DomRenderTests
     }
 
     [Fact]
+    public void Frozen_And_Inspector_Draw_Extra_Pixels_Over_The_Base_Frame()
+    {
+        var (rows, tick) = Scene();
+        var cols = DomPresetRegistry.ByName("Full Professional")!.Columns;
+
+        SKBitmap Render(bool frozen, long? focus)
+        {
+            var bmp = new SKBitmap(420, 360);
+            using var canvas = new SKCanvas(bmp);
+            new DomLadderRenderer().Render(canvas, new SKRect(0, 0, 420, 360), rows, cols, tick,
+                spec: null, widths: null, frozen: frozen, focusPriceTicks: focus);
+            return bmp;
+        }
+
+        long Diff(SKBitmap a, SKBitmap b)
+        {
+            long n = 0;
+            for (int x = 0; x < a.Width; x++)
+            for (int y = 0; y < a.Height; y++)
+                if (a.GetPixel(x, y) != b.GetPixel(x, y)) n++;
+            return n;
+        }
+
+        using var bas = Render(false, null);
+        using var hovered = Render(false, rows[rows.Count / 2].PriceTicks);
+        using var frozen = Render(true, null);
+
+        // Hovering a real price draws the row outline + the inspector bar.
+        Assert.True(Diff(bas, hovered) > 0, "hover should draw an inspector");
+        // The FROZEN badge changes pixels too.
+        Assert.True(Diff(bas, frozen) > 0, "freeze should draw a badge");
+    }
+
+    [Fact]
     public void Empty_Rows_Show_Waiting_State()
     {
         using var bmp = new SKBitmap(300, 200);
@@ -122,12 +156,13 @@ public class DomRenderTests
         custom.SetVisible(DomColumnType.Delta, true);
         custom.SetWidth(DomColumnType.Price, 96);
 
-        var panels = new (string Label, IReadOnlyList<DomColumnType> Cols, IReadOnlyList<double>? Widths)[]
+        long inspectPrice = rows[rows.Count / 2].PriceTicks;
+        var panels = new (string Label, IReadOnlyList<DomColumnType> Cols, IReadOnlyList<double>? Widths, bool Frozen, long? Focus)[]
         {
-            ("Classic Depth", DomPresetRegistry.ByName("Classic Depth")!.Columns, null),
-            ("Order Flow", DomPresetRegistry.ByName("Order Flow")!.Columns, null),
-            ("Full Professional", DomPresetRegistry.ByName("Full Professional")!.Columns, null),
-            ("Custom (edited)", custom.ResolveColumns(), custom.ResolveWidths()),
+            ("Classic Depth", DomPresetRegistry.ByName("Classic Depth")!.Columns, null, false, null),
+            ("Order Flow", DomPresetRegistry.ByName("Order Flow")!.Columns, null, false, null),
+            ("Full Professional", DomPresetRegistry.ByName("Full Professional")!.Columns, null, false, null),
+            ("Custom + freeze + inspector", custom.ResolveColumns(), custom.ResolveWidths(), true, inspectPrice),
         };
 
         const int w = 380, h = 360;
@@ -141,7 +176,8 @@ public class DomRenderTests
             using var panel = new SKBitmap(w, h - 16);
             using (var pc = new SKCanvas(panel))
                 new DomLadderRenderer().Render(pc, new SKRect(0, 0, w, h - 16), rows,
-                    panels[i].Cols, tick, spec: null, widths: panels[i].Widths);
+                    panels[i].Cols, tick, spec: null, widths: panels[i].Widths,
+                    frozen: panels[i].Frozen, focusPriceTicks: panels[i].Focus);
             canvas.DrawBitmap(panel, i * w, 16);
             canvas.DrawText(panels[i].Label, i * w + 8, 12, label);
         }

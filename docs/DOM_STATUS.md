@@ -25,10 +25,10 @@ Legend: ✅ done · 🟡 partial / data-limited · ⬜ next phase.
 | Interactive column builder (show/hide/reorder/resize) | ✅ | ✅ | — | popup editor; resolves to renderer columns + widths |
 | Per-column width override (renderer + persistence) | ✅ | ✅ | — | clamped 36–220 px; round-trips |
 | Layout persistence (templates) | ✅ | ✅ | — | base preset + serialised custom layout |
+| Freeze view (hold ladder for study) | ✅ | ✅ | — | header toggle; live readouts keep updating |
+| Row inspector on hover (price breakdown) | ✅ | ✅ | — | Skia overlay + outline; no context actions |
+| Replay hash for DOM analytics | ✅ | ✅ | — | `ReadOnlyDom.Hash` — deterministic, order-sensitive |
 | Per-column settings panel | ⬜ | — | — | next phase |
-| Auto-center modes / return-to-market / freeze view | ⬜ | — | — | next phase |
-| Row inspector / context menu / DOM tooltips | ⬜ | — | — | next phase |
-| Replay hash for DOM analytics | ⬜ | — | — | book/profile already deterministic |
 
 ## Defects fixed this pass
 1. **Cumulative depth inversion** — `ReadOnlyDom` summed from the far edge inward despite

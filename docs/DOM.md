@@ -74,6 +74,24 @@ The editor is strictly presentational — it only changes which analytical colum
 ladder shows and how wide they are. There are no order-entry surfaces, and the popup is
 itself labelled READ ONLY.
 
+## Study aids (freeze + inspector)
+
+Two read-only aids sit on the ladder:
+
+- **Freeze** (header toggle) holds the ladder so a level can be studied while the market
+  moves. A `❄ FROZEN` chip marks the held state; live bid/ask/spread readouts keep
+  updating. Editing the column layout still works while frozen. Freezing acts on the view
+  only — it does not pause the feed or touch the market.
+- **Row inspector**: hovering a row outlines it and shows a bottom strip with that price's
+  full breakdown (price, bid/ask size, cumulative depth, executed buy/sell, delta, wall
+  flag). It is informational only — there is no context menu or order action.
+
+## Determinism
+
+`ReadOnlyDom.Hash` returns a 64-bit FNV-1a hash of a DOM snapshot's observable fields in
+row order. It is deterministic and order-sensitive, so a replay can assert the DOM
+reconstructed identically from the same recorded book/trade data.
+
 ## Reconciliation
 
 Tested invariants: DOM best bid/ask equal the book's; the book is never crossed; rows
@@ -89,9 +107,8 @@ Wall floor 150 (NQ) / 300 (ES). Tick 0.25 both; point value $20 (NQ) / $50 (ES).
 - Pulling/stacking/replenishment are **Estimated** from MBP. They are surfaced as
   dedicated DOM columns (Pull/Stk, Refill) in the relevant presets and editable via the
   column builder.
-- The per-column settings panel, auto-center modes, freeze view, row inspector, and
-  DOM-specific keyboard shortcuts are scoped as the next phase; the data/analytics
-  foundation they build on is in place.
+- The per-column settings panel and DOM-specific keyboard shortcuts are scoped as the
+  next phase; the data/analytics foundation they build on is in place.
 - Native MBO analytics are capability-gated and inactive on the MBP feed (by design).
 
 ## Interpretation
