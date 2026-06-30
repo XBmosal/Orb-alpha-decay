@@ -51,9 +51,28 @@ data requirement, default width, alignment, estimated flag). `DomPresetRegistry`
 **ten protected built-in presets** — Classic Depth, Order Flow, Pulling & Stacking,
 Liquidity Analysis, Executed Volume, Replenishment, MBO Analytics, Compact Ladder, Full
 Professional, Replay Study — each an ordered list of column types around the central
-price column. This is the data model for a configurable ladder; the interactive
-column-builder UI (show/hide/reorder/resize + per-instrument overrides) is the next
-phase.
+price column.
+
+`DomLayout` is the editable layer on top of a preset: it holds **every** known column
+with a visibility flag, an explicit order, and a width. `FromPreset` seeds it (preset
+columns visible first, the rest hidden); `ResolveColumns` / `ResolveWidths` produce
+exactly what the Skia renderer consumes. It serialises to a compact `id:visible:width`
+string for template persistence and deserialises defensively (unknown ids skipped, new
+columns back-filled hidden).
+
+## Column builder (UI)
+
+The Order Book header's **"DOM:"** button opens a popup editor:
+
+- **Preset chips** pick a base layout (the active preset is highlighted).
+- Each column row toggles **show/hide** (click the row), **reorders** (▲▼), and
+  **resizes** (−/＋, clamped 36–220 px). Estimated and MBO columns are tagged.
+- Once a layout is hand-edited the button reads `DOM: <preset>*` and the customised
+  layout (not just the preset name) is saved into the chart template.
+
+The editor is strictly presentational — it only changes which analytical columns the
+ladder shows and how wide they are. There are no order-entry surfaces, and the popup is
+itself labelled READ ONLY.
 
 ## Reconciliation
 
@@ -67,11 +86,12 @@ Wall floor 150 (NQ) / 300 (ES). Tick 0.25 both; point value $20 (NQ) / $50 (ES).
 
 ## Known limitations / next phase
 
-- Pulling/stacking/replenishment are **Estimated** from MBP and not yet surfaced as
-  dedicated DOM columns in the WPF view (the model + analytics exist and are tested).
-- The interactive column-builder, per-column settings panel, preset persistence,
-  auto-center modes, freeze view, row inspector, and DOM-specific keyboard shortcuts are
-  scoped as the next phase; the data/analytics foundation they build on is in place.
+- Pulling/stacking/replenishment are **Estimated** from MBP. They are surfaced as
+  dedicated DOM columns (Pull/Stk, Refill) in the relevant presets and editable via the
+  column builder.
+- The per-column settings panel, auto-center modes, freeze view, row inspector, and
+  DOM-specific keyboard shortcuts are scoped as the next phase; the data/analytics
+  foundation they build on is in place.
 - Native MBO analytics are capability-gated and inactive on the MBP feed (by design).
 
 ## Interpretation

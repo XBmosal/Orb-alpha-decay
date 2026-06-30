@@ -6,6 +6,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using FlowTerminal.Analytics.Bars;
+using FlowTerminal.Charting.Dom;
 using FlowTerminal.Charting.Studies;
 using FlowTerminal.Domain.Instruments;
 
@@ -404,26 +405,221 @@ public partial class MainWindow : Window
 
     private string _footprintPreset = FlowTerminal.Analytics.Footprints.FootprintPresetRegistry.Default.Name;
 
-    // Read-only DOM layout: which preset's columns the Skia ladder renders.
-    private string _domPreset = "Full Professional";
-    private IReadOnlyList<FlowTerminal.Charting.Dom.DomColumnType> _domColumns =
-        FlowTerminal.Charting.Dom.DomPresetRegistry.ByName("Full Professional")!.Columns;
+    // ── Read-only DOM column layout (show / hide / reorder / resize) ──────────
+    //
+    // The Skia ladder renders whatever columns the editable layout resolves to. A preset
+    // seeds the layout; the user can then customise it. All of this is presentational —
+    // there are no order-entry surfaces anywhere in the DOM editor.
 
+    private string _domPreset = "Full Professional";
+    private DomLayout _domLayout = DomLayout.FromPreset(DomPresetRegistry.ByName("Full Professional")!);
+    private bool _domCustom;                 // true once the layout diverges from its preset
+    private const double DomWidthStep = 8;
+
+    // Cached last frame so editing the layout repaints the ladder immediately, even when idle.
+    private IReadOnlyList<DomRow> _lastDomRows = Array.Empty<DomRow>();
+    private InstrumentSpec? _lastDomSpec;
+    private decimal _lastDomTick = 0.25m;
+
+    /// <summary>Replaces the layout with a preset's columns and refreshes the editor + ladder.</summary>
     private void ApplyDomPreset(string name)
     {
-        var preset = FlowTerminal.Charting.Dom.DomPresetRegistry.ByName(name)
-            ?? FlowTerminal.Charting.Dom.DomPresetRegistry.Default;
+        var preset = DomPresetRegistry.ByName(name) ?? DomPresetRegistry.Default;
         _domPreset = preset.Name;
-        _domColumns = preset.Columns;
-        DomPresetButton.Content = $"DOM: {preset.Name}";
+        _domLayout = DomLayout.FromPreset(preset);
+        _domCustom = false;
+        RefreshDomEditor();
     }
 
-    private void CycleDomPreset()
+    /// <summary>Restores the serialised custom layout from a template (falls back to preset).</summary>
+    private void ApplyDomLayout(string preset, string? layout)
     {
-        var all = FlowTerminal.Charting.Dom.DomPresetRegistry.BuiltIns;
-        int idx = 0;
-        for (int i = 0; i < all.Count; i++) if (all[i].Name == _domPreset) idx = i;
-        ApplyDomPreset(all[(idx + 1) % all.Count].Name);
+        var basePreset = DomPresetRegistry.ByName(preset) ?? DomPresetRegistry.Default;
+        _domPreset = basePreset.Name;
+        var restored = DomLayout.Deserialize(layout);
+        _domLayout = restored ?? DomLayout.FromPreset(basePreset);
+        _domCustom = restored is not null;
+        RefreshDomEditor();
+    }
+
+    /// <summary>Rebuilds the preset chips, the column list, the button label, and repaints.</summary>
+    private void RefreshDomEditor()
+    {
+        DomPresetButtonText.Text = _domCustom ? $"DOM: {_domPreset}*" : $"DOM: {_domPreset}";
+        BuildDomPresetChips();
+        BuildDomColumnList();
+        RefreshDomLadder();
+    }
+
+    /// <summary>Pushes the current layout to the ladder using the last frame's rows.</summary>
+    private void RefreshDomLadder() =>
+        DomLadder.Update(_lastDomRows, _domLayout.ResolveColumns(), _domLayout.ResolveWidths(), _lastDomSpec, _lastDomTick);
+
+    private void BuildDomPresetChips()
+    {
+        DomPresetChips.Children.Clear();
+        foreach (var preset in DomPresetRegistry.BuiltIns)
+        {
+            bool active = !_domCustom && preset.Name == _domPreset;
+            var chip = new Border
+            {
+                Padding = new Thickness(8, 3, 8, 3),
+                Margin = new Thickness(0, 0, 5, 5),
+                CornerRadius = new CornerRadius(5),
+                BorderThickness = new Thickness(1),
+                BorderBrush = (Brush)FindResource(active ? "AccentBrush" : "BorderSubtleBrush"),
+                Background = active ? (Brush)FindResource("SurfaceHoverBrush") : Brushes.Transparent,
+                Cursor = Cursors.Hand,
+                ToolTip = preset.Description + (preset.RequiresMbo ? "  (needs MBO data)" : ""),
+                Child = new TextBlock
+                {
+                    Text = preset.Name,
+                    FontSize = 11,
+                    Foreground = (Brush)FindResource(active ? "TextBrush" : "TextSecondaryBrush"),
+                },
+            };
+            chip.MouseLeftButtonUp += (_, _) => ApplyDomPreset(preset.Name);
+            DomPresetChips.Children.Add(chip);
+        }
+    }
+
+    private void BuildDomColumnList()
+    {
+        DomColumnsPanel.Children.Clear();
+        var cols = _domLayout.Columns;
+        for (int i = 0; i < cols.Count; i++)
+            DomColumnsPanel.Children.Add(BuildDomColumnRow(cols[i], i, cols.Count));
+    }
+
+    private FrameworkElement BuildDomColumnRow(DomLayoutColumn column, int index, int count)
+    {
+        var d = column.Descriptor;
+
+        var dock = new DockPanel { LastChildFill = true, Margin = new Thickness(2, 1, 2, 1) };
+
+        // Visibility toggle (a small check box drawn as a glyph, matching the indicator menu).
+        var check = new TextBlock
+        {
+            Text = column.Visible ? "✓" : string.Empty,
+            Foreground = (Brush)FindResource(d.Side == DomColumnSide.Ask ? "BearishBrush" : "BullishBrush"),
+            FontWeight = FontWeights.Bold,
+            Width = 16,
+            TextAlignment = TextAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        DockPanel.SetDock(check, Dock.Left);
+        dock.Children.Add(check);
+
+        // Reorder + resize controls live on the right.
+        var up = DomMiniButton("▲", index > 0, () => { if (_domLayout.MoveUp(index)) MarkDomCustom(); });
+        var down = DomMiniButton("▼", index < count - 1, () => { if (_domLayout.MoveDown(index)) MarkDomCustom(); });
+        var widthText = new TextBlock
+        {
+            Text = ((int)Math.Round(column.Width)).ToString(CultureInfo.InvariantCulture),
+            FontSize = 10,
+            Width = 24,
+            TextAlignment = TextAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            Foreground = (Brush)FindResource("MutedTextBrush"),
+        };
+        var minus = DomMiniButton("−", column.Width > DomLayout.MinWidth,
+            () => { _domLayout.SetWidth(column.Type, column.Width - DomWidthStep); MarkDomCustom(); });
+        var plus = DomMiniButton("＋", column.Width < DomLayout.MaxWidth,
+            () => { _domLayout.SetWidth(column.Type, column.Width + DomWidthStep); MarkDomCustom(); });
+
+        var controls = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+        controls.Children.Add(minus);
+        controls.Children.Add(widthText);
+        controls.Children.Add(plus);
+        controls.Children.Add(new Border { Width = 6 });
+        controls.Children.Add(up);
+        controls.Children.Add(down);
+        DockPanel.SetDock(controls, Dock.Right);
+        dock.Children.Add(controls);
+
+        // Estimated / MBO capability tag.
+        string? tag = d.Requirement.HasFlag(DomDataRequirement.Mbo) ? "MBO"
+            : d.Estimated ? "est" : null;
+        if (tag is not null)
+        {
+            var tagBlock = new TextBlock
+            {
+                Text = tag,
+                FontSize = 9,
+                Foreground = (Brush)FindResource("MutedTextBrush"),
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(6, 0, 6, 0),
+            };
+            DockPanel.SetDock(tagBlock, Dock.Right);
+            dock.Children.Add(tagBlock);
+        }
+
+        var name = new TextBlock
+        {
+            Text = d.FullName,
+            Foreground = (Brush)FindResource(column.Visible ? "TextBrush" : "MutedTextBrush"),
+            VerticalAlignment = VerticalAlignment.Center,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            Margin = new Thickness(4, 0, 0, 0),
+        };
+        dock.Children.Add(name);
+
+        var row = new Border
+        {
+            Padding = new Thickness(6, 3, 6, 3),
+            CornerRadius = new CornerRadius(5),
+            Background = Brushes.Transparent,
+            Cursor = Cursors.Hand,
+            Child = dock,
+            ToolTip = d.FullName,
+        };
+        row.MouseEnter += (_, _) => row.Background = (Brush)FindResource("SurfaceHoverBrush");
+        row.MouseLeave += (_, _) => row.Background = Brushes.Transparent;
+        // Clicking the row (outside the buttons) toggles visibility.
+        row.MouseLeftButtonUp += (_, _) =>
+        {
+            _domLayout.SetVisible(column.Type, !column.Visible);
+            MarkDomCustom();
+        };
+        return row;
+    }
+
+    private Border DomMiniButton(string glyph, bool enabled, Action onClick)
+    {
+        var b = new Border
+        {
+            Width = 18,
+            Height = 18,
+            CornerRadius = new CornerRadius(4),
+            Background = Brushes.Transparent,
+            BorderBrush = (Brush)FindResource("BorderSubtleBrush"),
+            BorderThickness = new Thickness(1),
+            Margin = new Thickness(1, 0, 1, 0),
+            Cursor = enabled ? Cursors.Hand : Cursors.Arrow,
+            Child = new TextBlock
+            {
+                Text = glyph,
+                FontSize = 10,
+                TextAlignment = TextAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                Foreground = (Brush)FindResource(enabled ? "TextSecondaryBrush" : "GridLineBrush"),
+            },
+        };
+        if (enabled)
+        {
+            b.MouseEnter += (_, _) => b.Background = (Brush)FindResource("SurfacePrimaryBrush");
+            b.MouseLeave += (_, _) => b.Background = Brushes.Transparent;
+            b.MouseLeftButtonUp += (_, e) => { e.Handled = true; onClick(); };
+        }
+        return b;
+    }
+
+    /// <summary>Records that the layout was hand-edited, then refreshes the editor + ladder.</summary>
+    private void MarkDomCustom()
+    {
+        _domCustom = true;
+        RefreshDomEditor();
     }
 
     /// <summary>Applies a named footprint preset for the current instrument, preserving the choice.</summary>
@@ -616,7 +812,7 @@ public partial class MainWindow : Window
         RedoButton.Click += (_, _) => Chart.Redo();
         AddIndicatorButton.Click += (_, _) => IndicatorsButton.IsChecked = true;
         FootprintModeButton.Click += (_, _) => CycleFootprintPreset();
-        DomPresetButton.Click += (_, _) => CycleDomPreset();
+        // The DOM column editor opens via the toggle button's IsChecked → Popup binding.
 
         // Surface keyboard shortcuts in the tooltips of the controls they drive.
         UndoButton.ToolTip = "Undo drawing (Ctrl+Z)";
@@ -799,7 +995,12 @@ public partial class MainWindow : Window
             (int)_feed.Timeframe.TotalMinutes,
             Chart.ChartType.ToString(),
             _cvdView.ToString(),
-            _studyState.Enabled.ToArray()) { FootprintMode = _footprintPreset, DomPreset = _domPreset });
+            _studyState.Enabled.ToArray())
+        {
+            FootprintMode = _footprintPreset,
+            DomPreset = _domPreset,
+            DomLayout = _domCustom ? _domLayout.Serialize() : null,
+        });
         _templateStore.Save(_templates);
         TemplateNameBox.Text = string.Empty;
         BuildTemplatesMenu();
@@ -815,8 +1016,8 @@ public partial class MainWindow : Window
 
         if (FlowTerminal.Analytics.Footprints.FootprintPresetRegistry.ByName(t.FootprintMode) is not null)
             ApplyFootprintPreset(t.FootprintMode);
-        if (FlowTerminal.Charting.Dom.DomPresetRegistry.ByName(t.DomPreset) is not null)
-            ApplyDomPreset(t.DomPreset);
+        if (DomPresetRegistry.ByName(t.DomPreset) is not null)
+            ApplyDomLayout(t.DomPreset, t.DomLayout);
 
         await SelectTimeframeAsync(TimeSpan.FromMinutes(Math.Max(1, t.TimeframeMinutes)));
     }
@@ -985,7 +1186,10 @@ public partial class MainWindow : Window
     {
         var rows = snapshot.Dom;
         var spec = _contract?.Spec;
-        DomLadder.Update(rows, _domColumns, spec, spec?.TickSize ?? 0.25m);
+        _lastDomRows = rows;
+        _lastDomSpec = spec;
+        _lastDomTick = spec?.TickSize ?? 0.25m;
+        DomLadder.Update(rows, _domLayout.ResolveColumns(), _domLayout.ResolveWidths(), spec, _lastDomTick);
 
         if (_contract is null || rows.Count == 0 || !snapshot.BookValid)
         {

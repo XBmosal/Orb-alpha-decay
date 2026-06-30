@@ -19,7 +19,8 @@ public sealed class DomLadderRenderer
     public DomLadderRenderer(ChartPalette? palette = null) => _palette = palette ?? ChartPalette.Default;
 
     public void Render(SKCanvas canvas, SKRect bounds, IReadOnlyList<DomRow> rows,
-        IReadOnlyList<DomColumnType> columns, decimal tickSize, InstrumentSpec? spec = null)
+        IReadOnlyList<DomColumnType> columns, decimal tickSize, InstrumentSpec? spec = null,
+        IReadOnlyList<double>? widths = null)
     {
         canvas.Clear(_palette.PanelBackground.ToSkColor());
         if (rows.Count == 0 || columns.Count == 0)
@@ -33,15 +34,22 @@ public sealed class DomLadderRenderer
         float left = bounds.Left + pad, right = bounds.Right - pad;
         float totalW = right - left;
 
-        // Column widths: scale the descriptors' default widths to fit the panel.
+        // Column widths: each column's requested width (an editor override, else the
+        // descriptor default) scaled to fill the panel exactly.
         var descs = new DomColumnDescriptor[columns.Count];
+        var want = new float[columns.Count];
         float wantW = 0;
-        for (int i = 0; i < columns.Count; i++) { descs[i] = DomColumnRegistry.For(columns[i]); wantW += (float)descs[i].DefaultWidth; }
+        for (int i = 0; i < columns.Count; i++)
+        {
+            descs[i] = DomColumnRegistry.For(columns[i]);
+            want[i] = (float)(widths is not null && i < widths.Count ? widths[i] : descs[i].DefaultWidth);
+            wantW += want[i];
+        }
         float scale = wantW > 0 ? totalW / wantW : 1f;
 
         var x = new float[columns.Count + 1];
         x[0] = left;
-        for (int i = 0; i < columns.Count; i++) x[i + 1] = x[i] + (float)descs[i].DefaultWidth * scale;
+        for (int i = 0; i < columns.Count; i++) x[i + 1] = x[i] + want[i] * scale;
 
         float rowH = Math.Max(12f, (bounds.Height - headerH - pad) / rows.Count);
         long maxSize = 1;

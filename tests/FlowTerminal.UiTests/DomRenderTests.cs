@@ -66,6 +66,33 @@ public class DomRenderTests
     }
 
     [Fact]
+    public void Custom_Layout_Renders_With_Hidden_Reordered_Resized_Columns()
+    {
+        var (rows, tick) = Scene();
+        var layout = DomLayout.FromPreset(DomPresetRegistry.ByName("Full Professional")!);
+        layout.SetVisible(DomColumnType.BidPullStack, false);   // hide
+        layout.SetVisible(DomColumnType.AskPullStack, false);
+        layout.SetWidth(DomColumnType.Price, 110);              // widen
+        layout.MoveDown(0);                                     // reorder
+
+        using var bmp = new SKBitmap(420, 360);
+        using var canvas = new SKCanvas(bmp);
+        new DomLadderRenderer().Render(canvas, new SKRect(0, 0, 420, 360), rows,
+            layout.ResolveColumns(), tick, spec: null, widths: layout.ResolveWidths());
+
+        bool any = false, red = false;
+        for (int x = 0; x < bmp.Width; x += 2)
+        for (int y = 0; y < bmp.Height; y += 2)
+        {
+            var p = bmp.GetPixel(x, y);
+            if (p.Red + p.Green + p.Blue > 60) any = true;
+            if (p.Red > 180 && p.Green < 90 && p.Blue < 90) red = true;
+        }
+        Assert.True(any, "custom layout should still render content");
+        Assert.False(red, "DOM must not use red");
+    }
+
+    [Fact]
     public void Empty_Rows_Show_Waiting_State()
     {
         using var bmp = new SKBitmap(300, 200);
@@ -85,21 +112,38 @@ public class DomRenderTests
         var dir = Environment.GetEnvironmentVariable("FT_PREVIEW_DIR");
         if (string.IsNullOrEmpty(dir)) return;
         var (rows, tick) = Scene();
-        string[] names = { "Classic Depth", "Order Flow", "Full Professional" };
+
+        // Three presets plus a hand-customised layout (columns hidden, reordered, widened).
+        var custom = DomLayout.FromPreset(DomPresetRegistry.ByName("Full Professional")!);
+        custom.SetVisible(DomColumnType.BidPullStack, false);
+        custom.SetVisible(DomColumnType.AskPullStack, false);
+        custom.SetVisible(DomColumnType.BidCumulative, false);
+        custom.SetVisible(DomColumnType.AskCumulative, false);
+        custom.SetVisible(DomColumnType.Delta, true);
+        custom.SetWidth(DomColumnType.Price, 96);
+
+        var panels = new (string Label, IReadOnlyList<DomColumnType> Cols, IReadOnlyList<double>? Widths)[]
+        {
+            ("Classic Depth", DomPresetRegistry.ByName("Classic Depth")!.Columns, null),
+            ("Order Flow", DomPresetRegistry.ByName("Order Flow")!.Columns, null),
+            ("Full Professional", DomPresetRegistry.ByName("Full Professional")!.Columns, null),
+            ("Custom (edited)", custom.ResolveColumns(), custom.ResolveWidths()),
+        };
+
         const int w = 380, h = 360;
-        using var bmp = new SKBitmap(w * names.Length, h);
+        using var bmp = new SKBitmap(w * panels.Length, h);
         using var canvas = new SKCanvas(bmp);
         using var label = new SKPaint { Color = ChartPalette.Default.Text.ToSkColor(), TextSize = 12, IsAntialias = true };
-        for (int i = 0; i < names.Length; i++)
+        for (int i = 0; i < panels.Length; i++)
         {
-            var preset = DomPresetRegistry.ByName(names[i])!;
             // Render each panel to its own bitmap (the renderer clears its whole surface),
-            // then composite — so all three presets are visible side by side.
+            // then composite — so all panels are visible side by side.
             using var panel = new SKBitmap(w, h - 16);
             using (var pc = new SKCanvas(panel))
-                new DomLadderRenderer().Render(pc, new SKRect(0, 0, w, h - 16), rows, preset.Columns, tick);
+                new DomLadderRenderer().Render(pc, new SKRect(0, 0, w, h - 16), rows,
+                    panels[i].Cols, tick, spec: null, widths: panels[i].Widths);
             canvas.DrawBitmap(panel, i * w, 16);
-            canvas.DrawText(names[i], i * w + 8, 12, label);
+            canvas.DrawText(panels[i].Label, i * w + 8, 12, label);
         }
 
         Directory.CreateDirectory(dir);

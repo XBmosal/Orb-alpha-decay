@@ -18,13 +18,16 @@ public sealed class DomHost : SKElement
     private readonly DomLadderRenderer _renderer = new();
     private IReadOnlyList<DomRow> _rows = Array.Empty<DomRow>();
     private IReadOnlyList<DomColumnType> _columns = DomPresetRegistry.Default.Columns;
+    private IReadOnlyList<double>? _widths;
     private InstrumentSpec? _spec;
     private decimal _tick = 0.25m;
 
-    public void Update(IReadOnlyList<DomRow> rows, IReadOnlyList<DomColumnType> columns, InstrumentSpec? spec, decimal tickSize)
+    public void Update(IReadOnlyList<DomRow> rows, IReadOnlyList<DomColumnType> columns,
+        IReadOnlyList<double>? widths, InstrumentSpec? spec, decimal tickSize)
     {
         _rows = rows;
         _columns = columns;
+        _widths = widths;
         _spec = spec;
         _tick = tickSize;
         InvalidateVisual();
@@ -34,7 +37,7 @@ public sealed class DomHost : SKElement
     {
         var canvas = e.Surface.Canvas;
         var bounds = new SKRect(0, 0, e.Info.Width, e.Info.Height);
-        if (!RenderSafety.Guard(canvas, bounds, () => _renderer.Render(canvas, bounds, _rows, _columns, _tick, _spec), label: "DOM view paused"))
+        if (!RenderSafety.Guard(canvas, bounds, () => _renderer.Render(canvas, bounds, _rows, _columns, _tick, _spec, _widths), label: "DOM view paused"))
         {
             RenderGuard.LogThrottled("dom");
         }

@@ -20,10 +20,11 @@ Legend: ✅ done · 🟡 partial / data-limited · ⬜ next phase.
 | 10 built-in presets (protected) | ✅ | ✅ | — | MBO preset capability-gated |
 | MBO order-level columns | 🟡 | ✅ (gated) | — | require native MBO; inactive on MBP feed |
 | Skia ladder renderer (depth bars, best bid/ask, wall outlines, POC tint) | ✅ | ✅ | — | replaces the WPF ItemsControl; preset-driven columns |
-| Preset rendering in-app (9 MBP presets) + cycle button | ✅ | ✅ | — | toolbar "DOM:" button; persists in templates |
-| READ ONLY label in panel header | ✅ | — | — | |
-| Preset persistence (templates) | ✅ | — | — | mirrors footprint preset |
-| Interactive column builder (show/hide/reorder/resize) | ⬜ | — | — | next phase (model ready) |
+| Preset rendering in-app (10 presets) + preset chips | ✅ | ✅ | — | "DOM:" popup; chips pick a base preset |
+| READ ONLY label in panel header + editor | ✅ | — | — | |
+| Interactive column builder (show/hide/reorder/resize) | ✅ | ✅ | — | popup editor; resolves to renderer columns + widths |
+| Per-column width override (renderer + persistence) | ✅ | ✅ | — | clamped 36–220 px; round-trips |
+| Layout persistence (templates) | ✅ | ✅ | — | base preset + serialised custom layout |
 | Per-column settings panel | ⬜ | — | — | next phase |
 | Auto-center modes / return-to-market / freeze view | ⬜ | — | — | next phase |
 | Row inspector / context menu / DOM tooltips | ⬜ | — | — | next phase |

@@ -78,6 +78,13 @@ public static class DomColumnRegistry
         throw new ArgumentOutOfRangeException(nameof(type), type, "Unknown DOM column type.");
     }
 
+    /// <summary>Looks up a column by its stable serialisation id, or null if unknown.</summary>
+    public static DomColumnDescriptor? ById(string id)
+    {
+        foreach (var c in All) if (string.Equals(c.Id, id, StringComparison.OrdinalIgnoreCase)) return c;
+        return null;
+    }
+
     public static bool RequiresMbo(DomColumnType type) => For(type).Requirement.HasFlag(DomDataRequirement.Mbo);
 }
 

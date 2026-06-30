@@ -18,8 +18,14 @@ public sealed record ChartTemplate(
     /// <summary>Footprint cell mode (added in v0.37; older templates default to Bid×Ask).</summary>
     public string FootprintMode { get; init; } = "BidAsk";
 
-    /// <summary>Read-only DOM layout preset (added in v0.42; older templates default to Full Professional).</summary>
+    /// <summary>Read-only DOM base preset (added in v0.42; older templates default to Full Professional).</summary>
     public string DomPreset { get; init; } = "Full Professional";
+
+    /// <summary>
+    /// Serialised custom DOM column layout (added in v0.43): show/hide, order, and widths.
+    /// Null means "use the preset as-is"; older templates have no custom layout.
+    /// </summary>
+    public string? DomLayout { get; init; }
 }
 
 /// <summary>
