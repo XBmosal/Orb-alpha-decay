@@ -84,6 +84,7 @@ public sealed class LiveFeedService : IAsyncDisposable
     private const int MaxWarmMinutes = 480; // ~8h cap keeps even high-TF switches ~2s
 
     private LiquidityHeatmap _heatmap = new(TimeSpan.FromMilliseconds(250));
+    private PullStackTracker _pullStack = new();
     private readonly HeatmapRenderer _heatmapRenderer = new();
     private readonly BookmapRenderer _bookmapRenderer = new();
     private readonly List<TradeDot> _tradeDots = new(); // recent executions for heatmap bubbles
@@ -329,6 +330,7 @@ public sealed class LiveFeedService : IAsyncDisposable
         _barsEvicted = 0;
         _lastWarmPriceTicks = 0;
         _heatmap = new LiquidityHeatmap(TimeSpan.FromMilliseconds(250));
+        _pullStack = new PullStackTracker();
         _tradeDots.Clear();
         _lastTradeTicks = 0;
     }
@@ -418,6 +420,7 @@ public sealed class LiveFeedService : IAsyncDisposable
                 if (e.Type is MarketEventType.BidUpdate or MarketEventType.AskUpdate)
                 {
                     _heatmap.OnDepth(e);
+                    _pullStack.OnDepth(e);
                 }
             }
 
@@ -551,7 +554,8 @@ public sealed class LiveFeedService : IAsyncDisposable
             cvdSeries.AddRange(_cvdBars);
             if (_cvdHasDev) cvdSeries.Add(new CvdBar(_cvdOpen, _cvdHigh, _cvdLow, _cvdClose));
 
-            var dom = ReadOnlyDom.Build(_book, _profile, 12);
+            long wallFloor = (_contract?.Root ?? RootSymbol.NQ) == RootSymbol.ES ? 300 : 150;
+            var dom = ReadOnlyDom.Build(_book, _profile, 12, _pullStack, wallFloor);
             return new ChartSnapshot(
                 bars, dom, _cvd.CumulativeDelta, _tape.Latest(50),
                 _book.IsValid, _book.InvalidReason, _diagnostics.Snapshot(),

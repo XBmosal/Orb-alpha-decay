@@ -7,7 +7,7 @@ namespace FlowTerminal.Charting.Dom;
 /// <summary>
 /// One row of the read-only depth-of-market ladder. This is observational data
 /// only — there are no order-entry, quantity, working-order, position, or P&amp;L
-/// fields, by design.
+/// fields, by design. Prices are integer ticks.
 /// </summary>
 public readonly record struct DomRow(
     long PriceTicks,
@@ -21,21 +21,49 @@ public readonly record struct DomRow(
     long Delta,
     bool IsPoc,
     bool IsValueAreaHigh,
-    bool IsValueAreaLow);
+    bool IsValueAreaLow,
+    bool IsBestBid = false,
+    bool IsBestAsk = false,
+    long DistanceTicks = 0,
+    long BidPulled = 0,
+    long BidStacked = 0,
+    long AskPulled = 0,
+    long AskStacked = 0,
+    int BidReplenish = 0,
+    int AskReplenish = 0,
+    bool IsBidWall = false,
+    bool IsAskWall = false);
 
 /// <summary>
-/// Builds a read-only DOM ladder from a market-by-price book plus a session volume
-/// profile. The ladder is a snapshot — it never mutates the book and exposes no way
-/// to act on it. Strictly observational.
+/// Builds a read-only DOM ladder from the canonical market-by-price book plus a
+/// session volume profile (the same book/trades the heatmap and footprint consume).
+/// The ladder is a snapshot — it never mutates the book and exposes no way to act on
+/// it. Strictly observational.
+///
+/// Conventions (documented and tested):
+///   - Cumulative depth accumulates <b>from the touch outward</b>: cumulative ask at
+///     price P (P ≥ best ask) is the sum of ask sizes from the best ask up to P;
+///     cumulative bid at price P (P ≤ best bid) is the sum from the best bid down to P.
+///   - Executed volume comes from the trade-driven profile (buys = traded at ask,
+///     sells = traded at bid) — never inferred from depth changes.
+///   - Pulling/stacking/replenishment (optional) come from <see cref="PullStackTracker"/>.
+///   - A level is a "wall" when its displayed size is unusually large relative to the
+///     visible side (≥ 3× the visible median) and clears an absolute floor.
 /// </summary>
 public static class ReadOnlyDom
 {
+    public static IReadOnlyList<DomRow> Build(IOrderBook book, VolumeProfile profile, int levels) =>
+        Build(book, profile, levels, tracker: null, wallFloor: long.MaxValue);
+
     /// <summary>
     /// Builds the ladder for <paramref name="levels"/> price steps either side of the
     /// mid, top (highest price) first. Returns an empty list when the book has no
-    /// established best bid/ask.
+    /// established best bid/ask. When <paramref name="tracker"/> is supplied the
+    /// pulling/stacking/replenishment fields are populated; <paramref name="wallFloor"/>
+    /// is the absolute minimum size a level must reach to be flagged a wall.
     /// </summary>
-    public static IReadOnlyList<DomRow> Build(IOrderBook book, VolumeProfile profile, int levels)
+    public static IReadOnlyList<DomRow> Build(
+        IOrderBook book, VolumeProfile profile, int levels, PullStackTracker? tracker, long wallFloor)
     {
         ArgumentNullException.ThrowIfNull(book);
         ArgumentNullException.ThrowIfNull(profile);
@@ -58,38 +86,78 @@ public static class ReadOnlyDom
         long poc = profile.PocTicks();
         var va = profile.ComputeValueArea();
 
-        long cumBid = 0;
-        long cumAsk = 0;
-        // Cumulative depth accumulates from the inside (best) outward; precompute by walking.
+        // Cumulative depth, touch-outward. Ask cum accumulates upward from best ask;
+        // bid cum accumulates downward from best bid.
+        var cumAskMap = new Dictionary<long, long>();
+        long run = 0;
+        for (long price = bestAsk; price <= top; price++)
+        {
+            run += book.SizeAt(Side.Ask, price);
+            cumAskMap[price] = run;
+        }
+
+        var cumBidMap = new Dictionary<long, long>();
+        run = 0;
+        for (long price = bestBid; price >= bottom; price--)
+        {
+            run += book.SizeAt(Side.Bid, price);
+            cumBidMap[price] = run;
+        }
+
+        // Wall thresholds: 3× the visible non-zero median per side, clearing the floor.
+        long bidWall = WallThreshold(book, Side.Bid, bestBid, bottom, wallFloor);
+        long askWall = WallThreshold(book, Side.Ask, bestAsk, top, wallFloor);
+
         var rows = new List<DomRow>((int)(top - bottom + 1));
         for (long price = top; price >= bottom; price--)
         {
             long bid = book.SizeAt(Side.Bid, price);
             long ask = book.SizeAt(Side.Ask, price);
-            cumAsk += ask; // asks accumulate downward toward the inside
             long tradedAtBid = profile.SellVolumeAt(price);
             long tradedAtAsk = profile.BuyVolumeAt(price);
 
+            long distance = price >= bestAsk ? price - bestAsk
+                : price <= bestBid ? bestBid - price : 0;
+
             rows.Add(new DomRow(
                 price, bid, ask,
-                CumulativeBid: 0, // filled in the second pass
-                CumulativeAsk: cumAsk,
+                CumulativeBid: cumBidMap.GetValueOrDefault(price),
+                CumulativeAsk: cumAskMap.GetValueOrDefault(price),
                 TradedAtBid: tradedAtBid,
                 TradedAtAsk: tradedAtAsk,
                 TotalTraded: tradedAtBid + tradedAtAsk,
                 Delta: tradedAtAsk - tradedAtBid,
                 IsPoc: price == poc,
                 IsValueAreaHigh: price == va.VahTicks,
-                IsValueAreaLow: price == va.ValTicks));
-        }
-
-        // Second pass bottom-up for cumulative bid depth (accumulates upward toward inside).
-        for (int i = rows.Count - 1; i >= 0; i--)
-        {
-            cumBid += rows[i].BidSize;
-            rows[i] = rows[i] with { CumulativeBid = cumBid };
+                IsValueAreaLow: price == va.ValTicks,
+                IsBestBid: price == bestBid,
+                IsBestAsk: price == bestAsk,
+                DistanceTicks: distance,
+                BidPulled: tracker?.PulledAt(Side.Bid, price) ?? 0,
+                BidStacked: tracker?.StackedAt(Side.Bid, price) ?? 0,
+                AskPulled: tracker?.PulledAt(Side.Ask, price) ?? 0,
+                AskStacked: tracker?.StackedAt(Side.Ask, price) ?? 0,
+                BidReplenish: tracker?.ReplenishmentsAt(Side.Bid, price) ?? 0,
+                AskReplenish: tracker?.ReplenishmentsAt(Side.Ask, price) ?? 0,
+                IsBidWall: price <= bestBid && bid >= bidWall,
+                IsAskWall: price >= bestAsk && ask >= askWall));
         }
 
         return rows;
+    }
+
+    private static long WallThreshold(IOrderBook book, Side side, long touch, long edge, long floor)
+    {
+        var sizes = new List<long>();
+        if (side == Side.Bid)
+            for (long p = touch; p >= edge; p--) { long s = book.SizeAt(Side.Bid, p); if (s > 0) sizes.Add(s); }
+        else
+            for (long p = touch; p <= edge; p++) { long s = book.SizeAt(Side.Ask, p); if (s > 0) sizes.Add(s); }
+
+        if (sizes.Count == 0) return long.MaxValue;
+        sizes.Sort();
+        long median = sizes[sizes.Count / 2];
+        long relative = median * 3;
+        return Math.Max(relative, floor == long.MaxValue ? relative : floor);
     }
 }
