@@ -1,4 +1,5 @@
 using FlowTerminal.Analytics.Bars;
+using FlowTerminal.Analytics.BigTrades;
 using FlowTerminal.Analytics.Delta;
 using FlowTerminal.Analytics.Detectors;
 using FlowTerminal.Analytics.Footprints;
@@ -34,7 +35,9 @@ public sealed record ChartSnapshot(
     ChartOverlays Overlays,
     long BestBidTicks,
     long BestAskTicks,
-    IReadOnlyList<CvdBar> CvdSeries);
+    IReadOnlyList<CvdBar> CvdSeries,
+    IReadOnlyList<BigTradeGroup> BigTrades,
+    BigTradeDiagnostics BigTradeDiagnostics);
 
 /// <summary>
 /// Drives a mock (or, when wired, live) feed through the canonical pipeline and the
@@ -89,11 +92,21 @@ public sealed class LiveFeedService : IAsyncDisposable
     private readonly BookmapRenderer _bookmapRenderer = new();
     private readonly List<TradeDot> _tradeDots = new(); // recent executions for heatmap bubbles
     private long _lastTradeTicks;
+    private DateTime _lastEventUtc; // most recent processed event time (for age-based queries)
     private long _heatmapMinSize; // contrast filter: hide resting levels below this size
 
     /// <summary>Sets the heatmap contrast filter — resting levels smaller than this are hidden.</summary>
     public void SetHeatmapMinSize(long minSize) => _heatmapMinSize = Math.Max(0, minSize);
     private readonly DetectorEngine _detectors = new(RootSymbol.NQ);
+
+    // Shared Big Trades engine: classifies aggressor side, aggregates groups, flags sweeps.
+    // The same groups drive the heatmap bubbles and are exposed on the snapshot so other
+    // panels reconcile against one source of truth.
+    private BigTradeDetector _bigTrades = BigTradeDetector.For(RootSymbol.NQ);
+
+    /// <summary>Whether qualifying Big Trade groups are emphasised on the heatmap.</summary>
+    public bool ShowBigTrades { get; set; } = true;
+
     private readonly PipelineDiagnostics _diagnostics = new();
 
     private InstrumentPipeline? _pipeline;
@@ -331,8 +344,10 @@ public sealed class LiveFeedService : IAsyncDisposable
         _lastWarmPriceTicks = 0;
         _heatmap = new LiquidityHeatmap(TimeSpan.FromMilliseconds(250));
         _pullStack = new PullStackTracker();
+        _bigTrades = BigTradeDetector.For(_contract?.Root ?? RootSymbol.NQ);
         _tradeDots.Clear();
         _lastTradeTicks = 0;
+        _lastEventUtc = default;
     }
 
     /// <summary>
@@ -412,6 +427,7 @@ public sealed class LiveFeedService : IAsyncDisposable
     {
         lock (_lock)
         {
+            _lastEventUtc = e.ExchangeTimestampUtc;
             _book.Apply(e);
             if (!warmUp)
             {
@@ -440,11 +456,15 @@ public sealed class LiveFeedService : IAsyncDisposable
                 _cvdClose = cvdNow;
                 _tape.Add(e);
 
-                // Live executions feed the heatmap trade bubbles (skip warm history).
+                // Live executions feed the Big Trades engine and heatmap bubbles (skip warm
+                // history). The engine classifies the aggressor side (preferring the feed's
+                // and inferring honestly otherwise); an unknown side is carried as Unknown —
+                // never silently counted as a sell.
                 if (!warmUp)
                 {
                     _lastTradeTicks = e.PriceTicks;
-                    _tradeDots.Add(new TradeDot(e.ExchangeTimestampUtc, e.PriceTicks, e.Quantity, e.Aggressor == AggressorSide.Buy));
+                    var classified = _bigTrades.OnTrade(e, _book.BestBidTicks, _book.BestAskTicks, _book.IsValid);
+                    _tradeDots.Add(new TradeDot(e.ExchangeTimestampUtc, e.PriceTicks, e.Quantity, classified.Side));
                     if (_tradeDots.Count > 8000) _tradeDots.RemoveRange(0, _tradeDots.Count - 8000);
                 }
                 _multiVwap.AddTrade(e.PriceTicks, e.Quantity, _calendar.TradingDate(e.ExchangeTimestampUtc));
@@ -556,11 +576,13 @@ public sealed class LiveFeedService : IAsyncDisposable
 
             long wallFloor = (_contract?.Root ?? RootSymbol.NQ) == RootSymbol.ES ? 300 : 150;
             var dom = ReadOnlyDom.Build(_book, _profile, 12, _pullStack, wallFloor);
+            var bigTrades = _bigTrades.Snapshot(_lastEventUtc == default ? DateTime.UtcNow : _lastEventUtc);
             return new ChartSnapshot(
                 bars, dom, _cvd.CumulativeDelta, _tape.Latest(50),
                 _book.IsValid, _book.InvalidReason, _diagnostics.Snapshot(),
                 _detectors.Recent(8), _detectors.TotalDetections, overlays,
-                _book.BestBidTicks, _book.BestAskTicks, cvdSeries);
+                _book.BestBidTicks, _book.BestAskTicks, cvdSeries,
+                bigTrades, _bigTrades.DiagnosticsSnapshot());
         }
     }
 
@@ -606,8 +628,11 @@ public sealed class LiveFeedService : IAsyncDisposable
             decimal tick = _contract?.Spec.TickSize ?? 0.25m;
             long bidSize = bid != BookSide.NoPrice ? _book.SizeAt(Side.Bid, bid) : 0;
             long askSize = ask != BookSide.NoPrice ? _book.SizeAt(Side.Ask, ask) : 0;
+            var bigTrades = ShowBigTrades
+                ? _bigTrades.Snapshot(_lastEventUtc == default ? DateTime.UtcNow : _lastEventUtc)
+                : null;
             _bookmapRenderer.Render(canvas, bounds, _heatmap, _tradeDots, bid, ask, _lastTradeTicks,
-                lo, hi, tick, _heatmapMinSize, view, bidSize, askSize);
+                lo, hi, tick, _heatmapMinSize, view, bidSize, askSize, bigTrades: bigTrades);
         }
     }
 

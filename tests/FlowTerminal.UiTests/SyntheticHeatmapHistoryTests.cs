@@ -37,7 +37,7 @@ public class SyntheticHeatmapHistoryTests
             }
             else if (e.Type == MarketEventType.Trade)
             {
-                trades.Add(new TradeDot(e.ExchangeTimestampUtc, e.PriceTicks, e.Quantity, e.Aggressor == AggressorSide.Buy));
+                trades.Add(new TradeDot(e.ExchangeTimestampUtc, e.PriceTicks, e.Quantity, e.Aggressor));
             }
         }
 

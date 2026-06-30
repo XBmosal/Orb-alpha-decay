@@ -1,10 +1,19 @@
 using System.Globalization;
+using FlowTerminal.Analytics.BigTrades;
+using FlowTerminal.Charting.BigTrades;
+using FlowTerminal.Domain.Events;
 using SkiaSharp;
 
 namespace FlowTerminal.Charting.Heatmap;
 
-/// <summary>One executed trade plotted as a bubble on the heatmap.</summary>
-public readonly record struct TradeDot(DateTime Time, long PriceTicks, long Quantity, bool IsBuy);
+/// <summary>
+/// One executed trade plotted as a bubble on the heatmap. <see cref="Side"/> carries the
+/// aggressor classification: an unknown-side trade is drawn neutral, never forced to sell.
+/// </summary>
+public readonly record struct TradeDot(DateTime Time, long PriceTicks, long Quantity, AggressorSide Side)
+{
+    public bool IsBuy => Side == AggressorSide.Buy;
+}
 
 /// <summary>
 /// Mutable interaction state for the heatmap: price/time zoom and pan (pan is in
@@ -45,8 +54,13 @@ public sealed class BookmapRenderer
 
     private readonly ChartPalette _palette;
     private readonly Dictionary<long, long> _merge = new(); // reused per column (no per-frame alloc)
+    private readonly BigTradeRenderer _bigTradeRenderer;
 
-    public BookmapRenderer(ChartPalette? palette = null) => _palette = palette ?? ChartPalette.Default;
+    public BookmapRenderer(ChartPalette? palette = null)
+    {
+        _palette = palette ?? ChartPalette.Default;
+        _bigTradeRenderer = new BigTradeRenderer(_palette);
+    }
 
     /// <param name="minSize">Hide resting levels smaller than this many contracts (contrast filter).</param>
     public void Render(
@@ -54,7 +68,8 @@ public sealed class BookmapRenderer
         long bestBidTicks, long bestAskTicks, long lastPriceTicks,
         long autoMinTicks, long autoMaxTicks, decimal tickSize,
         long minSize = 0, BookmapView? view = null, long bestBidSize = 0, long bestAskSize = 0,
-        HeatmapScale scale = HeatmapScale.Percentile)
+        HeatmapScale scale = HeatmapScale.Percentile,
+        IReadOnlyList<BigTradeGroup>? bigTrades = null)
     {
         canvas.Clear(_palette.Background.ToSkColor());
 
@@ -122,6 +137,14 @@ public sealed class BookmapRenderer
         DrawRestingWalls(canvas, plot, columns[^1], minPriceTicks, maxPriceTicks, minSize, ch, Y);
         DrawPriceTrail(canvas, plot, t0, t1, trades, minPriceTicks, maxPriceTicks, Y);
         DrawTradeBubblesAndVolume(canvas, plot, volTop, timeAxisTop, t0, t1, trades, minPriceTicks, maxPriceTicks, Y);
+
+        // Big Trades: emphasise qualifying groups over the faint all-trade context, using the
+        // heatmap's own time/price mapping so they align exactly. Reconciles with the shared
+        // detection engine (no separate heatmap big-trade logic).
+        if (bigTrades is { Count: > 0 })
+        {
+            _bigTradeRenderer.Render(canvas, plot, bigTrades, t0, t1, minPriceTicks, maxPriceTicks, tickSize);
+        }
 
         DrawLevelLine(canvas, plot, Y, bestBidTicks, minPriceTicks, maxPriceTicks, _palette.BullishCandle);
         DrawLevelLine(canvas, plot, Y, bestAskTicks, minPriceTicks, maxPriceTicks, _palette.BearishCandle);
@@ -264,50 +287,68 @@ public sealed class BookmapRenderer
         int buckets = Math.Max(1, (int)(plot.Width / 6f));
         int denom = Math.Max(1, buckets - 1);
 
-        var agg = new Dictionary<(int Bucket, long Price), (long Buy, long Sell)>();
-        var vol = new (long Buy, long Sell)[buckets];
+        var agg = new Dictionary<(int Bucket, long Price), (long Buy, long Sell, long Unknown)>();
+        var vol = new (long Buy, long Sell, long Unknown)[buckets];
         foreach (var tr in trades)
         {
             if (tr.Time < t0) continue;
             int b = (int)Math.Clamp((tr.Time - t0).TotalSeconds / totalSec * denom, 0, denom);
-            if (tr.IsBuy) vol[b].Buy += tr.Quantity; else vol[b].Sell += tr.Quantity;
+            Add(ref vol[b], tr.Side, tr.Quantity);
             if (tr.PriceTicks < minP || tr.PriceTicks >= maxP) continue;
             var key = (b, tr.PriceTicks);
             var cur = agg.GetValueOrDefault(key);
-            if (tr.IsBuy) cur.Buy += tr.Quantity; else cur.Sell += tr.Quantity;
+            Add(ref cur, tr.Side, tr.Quantity);
             agg[key] = cur;
         }
 
-        // Volume histogram along the bottom (buy green over sell purple, stacked).
+        // Volume histogram along the bottom (buy green over sell purple over unknown gray, stacked).
         long maxVolBar = 1;
-        for (int i = 0; i < buckets; i++) maxVolBar = Math.Max(maxVolBar, vol[i].Buy + vol[i].Sell);
+        for (int i = 0; i < buckets; i++) maxVolBar = Math.Max(maxVolBar, vol[i].Buy + vol[i].Sell + vol[i].Unknown);
         float barW = Math.Max(1f, plot.Width / buckets);
         float stripH = volBottom - volTop;
         using var vBuy = new SKPaint { Color = _palette.BullishCandle.WithAlpha(200).ToSkColor() };
         using var vSell = new SKPaint { Color = _palette.BearishCandle.WithAlpha(200).ToSkColor() };
+        using var vUnk = new SKPaint { Color = _palette.NeutralVolume.WithAlpha(190).ToSkColor() };
         for (int i = 0; i < buckets; i++)
         {
-            long total = vol[i].Buy + vol[i].Sell;
+            long total = vol[i].Buy + vol[i].Sell + vol[i].Unknown;
             if (total <= 0) continue;
             float x = plot.Left + (float)i / denom * plot.Width - barW / 2f;
             float hTot = stripH * (total / (float)maxVolBar);
             float hBuy = hTot * (vol[i].Buy / (float)total);
+            float hSell = hTot * (vol[i].Sell / (float)total);
             canvas.DrawRect(x, volBottom - hBuy, barW, hBuy, vBuy);
-            canvas.DrawRect(x, volBottom - hTot, barW, hTot - hBuy, vSell);
+            canvas.DrawRect(x, volBottom - hBuy - hSell, barW, hSell, vSell);
+            canvas.DrawRect(x, volBottom - hTot, barW, hTot - hBuy - hSell, vUnk);
         }
 
-        // Aggregated trade bubbles as shaded spheres.
+        // Aggregated trade bubbles as shaded spheres (dominant side decides colour; unknown neutral).
         long maxBubble = 1;
-        foreach (var v in agg.Values) maxBubble = Math.Max(maxBubble, v.Buy + v.Sell);
+        foreach (var v in agg.Values) maxBubble = Math.Max(maxBubble, v.Buy + v.Sell + v.Unknown);
         foreach (var (key, v) in agg)
         {
-            long total = v.Buy + v.Sell;
+            long total = v.Buy + v.Sell + v.Unknown;
             if (total <= 0) continue;
-            bool buyDom = v.Buy >= v.Sell;
             float r = (float)Math.Clamp(2.4 + Math.Sqrt(total / (double)maxBubble) * 16.0, 2.4, 18.0);
             float x = plot.Left + (float)key.Bucket / denom * plot.Width;
-            DrawSphere(canvas, x, y(key.Price), r, buyDom ? _palette.BullishCandle : _palette.BearishCandle);
+            DrawSphere(canvas, x, y(key.Price), r, DominantColor(v.Buy, v.Sell, v.Unknown));
         }
+    }
+
+    private static void Add(ref (long Buy, long Sell, long Unknown) acc, AggressorSide side, long qty)
+    {
+        switch (side)
+        {
+            case AggressorSide.Buy: acc.Buy += qty; break;
+            case AggressorSide.Sell: acc.Sell += qty; break;
+            default: acc.Unknown += qty; break;
+        }
+    }
+
+    private RgbaColor DominantColor(long buy, long sell, long unknown)
+    {
+        if (unknown > buy && unknown > sell) return _palette.NeutralVolume;
+        return buy >= sell ? _palette.BullishCandle : _palette.BearishCandle;
     }
 
     private void DrawSphere(SKCanvas canvas, float cx, float cy, float r, RgbaColor baseColor)

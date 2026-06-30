@@ -799,6 +799,12 @@ public partial class MainWindow : Window
         {
             _feed.SetDetectorEnabled(key, on);
         }
+
+        // The Large/Block Trade study also gates the Big Trade bubbles on the heatmap.
+        if (study.ShortCode == "LT")
+        {
+            _feed.ShowBigTrades = on;
+        }
     }
 
     // ── Undo/redo, add-indicator, and playback transport ────────────────────

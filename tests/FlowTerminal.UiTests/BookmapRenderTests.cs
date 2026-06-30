@@ -53,8 +53,8 @@ public class BookmapRenderTests
 
         var trades = new[]
         {
-            new TradeDot(T0.AddMilliseconds(600), 99, 40, true),   // buy → green bubble
-            new TradeDot(T0.AddMilliseconds(1200), 105, 40, false) // sell → purple bubble
+            new TradeDot(T0.AddMilliseconds(600), 99, 40, AggressorSide.Buy),   // buy → green bubble
+            new TradeDot(T0.AddMilliseconds(1200), 105, 40, AggressorSide.Sell) // sell → purple bubble
         };
 
         using var bmp = new SKBitmap(500, 260);
