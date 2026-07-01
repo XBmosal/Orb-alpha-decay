@@ -33,11 +33,21 @@ public sealed class RithmicMarketDataProvider : IMarketDataProvider
 
     public event Action<ConnectionState>? ConnectionStateChanged;
 
+    private RithmicCredentials? _credentials;
+
+    /// <summary>
+    /// Supplies the sign-in details used by <see cref="ConnectAsync"/>. The credentials are
+    /// held in memory only for the connection and are never logged (the password is
+    /// redacted by <see cref="RithmicCredentials.ToString"/>).
+    /// </summary>
+    public void Configure(RithmicCredentials credentials) => _credentials = credentials;
+
     public Task ConnectAsync(CancellationToken cancellationToken)
     {
         // Keep the interface event referenced under every build profile. Real state
         // transitions are raised from the SDK region once the adapter is wired in.
         _ = ConnectionStateChanged;
+        _ = _credentials; // consumed by the SDK region below once wired in
 #if RITHMIC_SDK
         // ──────────────────────────────────────────────────────────────────────
         // Authorized Rithmic R|API+ .NET integration goes here, written against the

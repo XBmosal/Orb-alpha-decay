@@ -9,6 +9,7 @@ using FlowTerminal.Analytics.Bars;
 using FlowTerminal.Charting.Dom;
 using FlowTerminal.Charting.Studies;
 using FlowTerminal.Domain.Instruments;
+using FlowTerminal.Rithmic;
 
 namespace FlowTerminal.App;
 
@@ -94,6 +95,7 @@ public partial class MainWindow : Window
         TemplateNameBox.KeyDown += (_, e) => { if (e.Key == Key.Enter) SaveCurrentTemplate(); };
 
         WirePlaybackAndEditing();
+        InitRithmicLogin();
 
         ContrastSlider.ValueChanged += (_, e) =>
         {
@@ -1304,5 +1306,87 @@ public partial class MainWindow : Window
         ReadOnlyBanner.Text = "READ ONLY";
         RithmicStatusText.Text = "Rithmic (Mock)";
         RithmicStatusText.ToolTip = _viewModel.RithmicStatus;
+    }
+
+    // ── Rithmic sign-in ─────────────────────────────────────────────────────
+
+    private readonly RithmicSession _rithmicSession = new();
+    private readonly RithmicCredentialStore _rithmicStore = new();
+    private bool _rithmicConnecting;
+
+    private void InitRithmicLogin()
+    {
+        // Pre-fill the non-secret fields from the last remembered login (never the password).
+        if (_rithmicStore.Load() is { } saved)
+        {
+            RithmicUserBox.Text = saved.Username;
+            RithmicSystemBox.Text = saved.SystemName;
+            RithmicGatewayBox.Text = saved.Gateway;
+            RithmicLiveCheck.IsChecked = saved.Environment == RithmicEnvironment.Live;
+            RithmicRememberCheck.IsChecked = true;
+        }
+
+        RithmicConnectButton.Click += async (_, _) => await ConnectRithmicAsync();
+        RithmicLoginStatus.Text = _viewModel.RithmicStatus;
+    }
+
+    private async Task ConnectRithmicAsync()
+    {
+        if (_rithmicConnecting) return;
+        _rithmicConnecting = true;
+        try
+        {
+            var credentials = new RithmicCredentials
+            {
+                Username = RithmicUserBox.Text.Trim(),
+                Password = RithmicPassBox.Password,           // read once; never stored/logged
+                SystemName = RithmicSystemBox.Text.Trim(),
+                Gateway = RithmicGatewayBox.Text.Trim(),
+                Environment = RithmicLiveCheck.IsChecked == true ? RithmicEnvironment.Live : RithmicEnvironment.Test,
+            };
+
+            SetRithmicStatus("Connecting…", _neutralBrush);
+            var result = await _rithmicSession.ConnectAsync(credentials);
+
+            switch (result.Outcome)
+            {
+                case RithmicConnectionOutcome.Connected:
+                    SetRithmicStatus(result.Message, _buyBrush);
+                    RithmicStatusText.Text = $"Rithmic · {credentials.SystemName}";
+                    ConnectionRegionText.Text = credentials.Environment.ToString().ToUpperInvariant();
+                    break;
+                case RithmicConnectionOutcome.InvalidCredentials:
+                    SetRithmicStatus(result.Message, _warningBrush);
+                    break;
+                case RithmicConnectionOutcome.SdkUnavailable:
+                    SetRithmicStatus(result.Message, _warningBrush);
+                    break;
+                default:
+                    SetRithmicStatus(result.Message, _sellBrush);
+                    break;
+            }
+
+            // Persist only the non-secret fields, and only when asked.
+            if (RithmicRememberCheck.IsChecked == true && credentials.IsComplete)
+            {
+                _rithmicStore.Save(new RithmicRememberedLogin(
+                    credentials.Username, credentials.SystemName, credentials.Gateway, credentials.Environment));
+            }
+            else if (RithmicRememberCheck.IsChecked != true)
+            {
+                _rithmicStore.Clear();
+            }
+        }
+        finally
+        {
+            _rithmicConnecting = false;
+        }
+    }
+
+    private void SetRithmicStatus(string message, Brush color)
+    {
+        RithmicLoginStatus.Text = message;
+        RithmicLoginStatus.Foreground = color;
+        RithmicStatusDot.Fill = color;
     }
 }
